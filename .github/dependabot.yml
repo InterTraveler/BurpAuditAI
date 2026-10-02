@@ -1,0 +1,38 @@
+# ────────────────────────────────────────────────────────────────────────────
+# Dependabot — automatic dependency updates
+# ────────────────────────────────────────────────────────────────────────────
+version: 2
+
+updates:
+  # Maven dependencies (pom.xml)
+  - package-ecosystem: "maven"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    # Group noisy patch updates together into a single PR.
+    groups:
+      test-deps:
+        patterns:
+          - "org.junit.jupiter"
+          - "org.junit.platform"
+      gson:
+        patterns:
+          - "com.google.code.gson"
+    # Don't bump Montoya API via Dependabot — PortSwigger controls its own
+    # release cadence and we want a human to read release notes first.
+    ignore:
+      - dependency-name: "net.portswigger.burp.extensions:montoya-api"
+
+  # GitHub Actions versions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 3

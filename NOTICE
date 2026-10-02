@@ -1,0 +1,28 @@
+BurpAuditAI
+Copyright 2024-2026 BurpAuditAI Contributors
+
+This product includes software developed by the BurpAuditAI project and its contributors.
+
+This product includes third-party software. Notices for those projects are
+reproduced below.
+
+────────────────────────────────────────────────────────────────────────────
+PortSwigger Montoya API (net.portswigger.burp.extensions:montoya-api)
+Copyright (c) PortSwigger Ltd.
+Provided at runtime by Burp Suite; not redistributed in the plugin JAR.
+Homepage: https://portswigger.net/burp/documentation/ MontoyaAPI
+────────────────────────────────────────────────────────────────────────────
+Google Gson (com.google.code.gson:gson)
+Copyright 2008 Google Inc.
+Licensed under the Apache License, Version 2.0.
+Bundled into the fat JAR by maven-shade-plugin.
+Homepage: https://github.com/google/gson
+────────────────────────────────────────────────────────────────────────────
+JUnit 5 (org.junit.jupiter:junit-jupiter)
+Copyright (c) JUnit Team and contributors.
+Licensed under the Eclipse Public License 2.0.
+Test-scope only; not packaged into the fat JAR.
+Homepage: https://junit.org/junit5/
+────────────────────────────────────────────────────────────────────────────
+
+For the full Apache License 2.0 text, see LICENSE in this repository.

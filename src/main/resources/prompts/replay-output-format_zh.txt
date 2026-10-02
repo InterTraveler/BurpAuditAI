@@ -1,0 +1,74 @@
+【输出格式】只能输出一个合法 JSON 对象，不含 JSON 外的任何文字、注释、Markdown 代码块。
+
+字段（key 必出现）：
+  analysis（字符串）：当前草稿；中间轮写进度，收尾轮写最终结论（【风险点】【建议】结构）。
+  tool_calls（数组）：
+    中间轮：要重放就写 1～3 个对象
+    收尾轮：[]
+    单个对象 schema（中间轮用）：
+      {"name":"replay_request",
+       "arguments":{
+         "reason":"<why>",
+         "replace_query_params":     { "key":"newValue", ... },   // URL 上的 ?k=v
+         "replace_form_params":      { "key":"newValue", ... },   // form body
+         "replace_header_params":    { "Key":"newValue", ... },   // 请求头（大小写不敏感）
+         "replace_json_params":      { "key":"newValue", ... },   // JSON 字段（支持点号路径如 user.id）
+         "replace_path_params":      { "segValue":"newValue", ... }, // URL 路径段（key=段当前字面值）
+         "replace_multipart_params": { "partName":"newValue", ... }  // multipart/form-data 的 part
+       }}
+  risk（字符串）：所有轮必填。
+    中间轮：固定写 "none"
+    收尾轮：从下列值按实际情况选一个——none / info / low / medium / high / critical
+  findings（数组）：
+    中间轮：固定写 []
+    收尾轮：按问题数写 0～N 个对象；每个对象必含三个 key
+      type        （字符串，漏洞/风险类型标签）
+      confidence  （0–100 整数，可信度）
+      description （字符串，详细描述）
+    【硬约束 · 反误报】confidence 必须 ≥ 10 才会出现在 findings 里。判不成立 / 仅残留小概率不确定性（如 5%–9%）的疑似条目一律不要写——把"宁错杀"的低置信度 finding 留给问题列表只会污染分析师注意力。整次收尾都没有 ≥ 10 confidence 的疑似时，findings 直接写 []，不要硬塞 1 条以防万一。
+
+6 类参数协议要点：
+- 6 个 map 都按 HTTP 报文中的"位置"分开提交，每个 key 只在自己所属位置查找
+  - replace_query_params     →  ?k=v（URL 参数）
+  - replace_form_params      →  application/x-www-form-urlencoded 的 body 参数
+  - replace_header_params    →  请求头（大小写不敏感）
+  - replace_json_params      →  JSON body 字段（支持点号路径，如 user.id）
+  - replace_path_params      →  URL 路径段（key=段当前字面值；不限于最后一段；仅 path-only 场景）
+  - replace_multipart_params →  multipart/form-data body 的 part（key=part 的 Content-Disposition.name）
+- value 是新值明文（未编码）。replay 工具会按参数位置做一次编码：query / form / path 走
+    percent-encode（path 空格用 %20）；json 走 JSON 字符串字面量；header / multipart 不编码原样透传。
+  - 默认给明文，agent 编码一次即 wire 上的规范形式。
+  - **需要二次编码（绕 WAF、测服务端多次解码）时**，自行在 payload 里按 RFC 3986 / JSON 语法
+    预写 %XX 或 \" / \\ 等转义序列，agent 会再编码一次得到 %2527 等 —— 这是渗透合法意图，
+    不要主动"归一化"或"解码"模型给的字符串。
+- 替换清单可以只列你想改的那几类，其它类原样保留
+- 写错位置会直接报错（错误信息会列出每个位置实际有哪些 key 可用），不会跨位置兜底
+- key 必须出现在 user 段【可替换参数】清单里（按对应分类）
+- replace_path_params 示例：/api/users/123 的段值是 [api, users, 123]，可改
+  {"123":"999"} → /api/users/999，或 {"api":"v2"} → /v2/users/123；/api/123/bbb/321
+  的段值是 [api, 123, bbb, 321]，可同时改 {"123":"999", "321":"666"}；同段值多次出现
+  → 全部替换
+
+【硬约束 · 必读】
+- 调 replay_request 之前，**必须**先看 user 段【可替换参数】清单，只用清单里有的 key
+- 清单为空（含显式的"无可替换参数"提示）→ tool_calls=[] 直接给最终结论，**不要**套用下面示例的 key
+- 不要照搬"id / 1'"这种通用模板——请求里实际有什么 key 取决于当前报文
+
+示例（任选其一）：
+
+A. 重放 1 次（改 query 参数，前提是 user 段【可替换参数】里有 - query: id）：
+{"analysis":"怀疑 id 存在 SQL 注入，先闭合单引号","tool_calls":[{"name":"replay_request","arguments":{"reason":"闭合单引号看回显","replace_query_params":{"id":"1'"}}}],"risk":"none","findings":[]}
+
+B. 重放 1 次（改 header 验证越权，前提是 user 段【可替换参数】里有 - header: X-User-Id）：
+{"analysis":"验证越权","tool_calls":[{"name":"replay_request","arguments":{"reason":"伪造 admin 身份","replace_header_params":{"X-User-Id":"admin"}}}],"risk":"none","findings":[]}
+
+C. 重放 1 次（改 JSON 字段，包括嵌套路径，前提是 user 段【可替换参数】里有 - json: user.id）：
+{"analysis":"探测 JSON 注入","tool_calls":[{"name":"replay_request","arguments":{"reason":"嵌套路径改 user.id","replace_json_params":{"user.id":"1' OR 1=1--"}}}],"risk":"none","findings":[]}
+
+D. 重放 1 次（改 URL 路径段值，前提是 user 段【可替换参数】里有 - path: 包含该段值）：
+{"analysis":"REST 风格路径参数注入","tool_calls":[{"name":"replay_request","arguments":{"reason":"改 path 段值测 SQL 注入","replace_path_params":{"123":"1' OR 1=1--"}}}],"risk":"none","findings":[]}
+
+E. 收尾给最终结论（清单为空时也走这条）：
+{"analysis":"【风险点】…\n【建议】…","tool_calls":[],"risk":"high","findings":[{"type":"…","confidence":90,"description":"…"}]}
+
+最多 3 次重放；超出时服务端会把 tool_calls 整个拒绝并在 user 段回 "budget_exhausted"，看到后立即收尾（哪怕只是"高度疑似"也得给结论）。字段缺失或类型错误将导致解析失败。

@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ============================================================================
+    BurpAuditAI - Burp Suite extension (Montoya API), Maven build descriptor
+    ============================================================================
+    This file is the core configuration of the Maven project. It declares:
+      1) Project coordinates (groupId / artifactId / version), identifying the
+         artifact identity and release version.
+      2) A unified compile target (Java 17 bytecode, matching the JDK 17
+         bundled with Burp Suite 2023.3+).
+      3) Dependencies:
+         montoya-api   : Burp's official extension API. Runtime-provided by
+                         Burp, so scope=provided; not packaged into the JAR.
+         gson          : JSON codec used for AI interface communication.
+                         This is a real runtime dependency and must be bundled
+                         into the final JAR.
+         junit-jupiter : JUnit 5 test framework. Test scope only; not packaged
+                         into the final artifact.
+      4) The packaging plugin (maven-shade-plugin), which merges third-party
+         dependencies such as gson into a single loadable fat JAR.
+    Note: XML comments disallow consecutive ASCII hyphens, so decorative lines
+    here use '=' and full-width characters to stay XML-comment-safe.
+    ============================================================================
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <name>BurpAuditAI</name>
+    <description>AI-augmented web security auditing for Burp Suite, driven by a pluggable SKILLS system on the Montoya API.</description>
+    <url>https://github.com/InterTraveler/BurpAuditAI</url>
+
+    <organization>
+        <name>BurpAuditAI Contributors</name>
+        <url>https://github.com/InterTraveler/BurpAuditAI</url>
+    </organization>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>InterTraveler</id>
+            <name>InterTraveler</name>
+            <url>https://github.com/InterTraveler</url>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:git://github.com/InterTraveler/BurpAuditAI.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/InterTraveler/BurpAuditAI.git</developerConnection>
+        <url>https://github.com/InterTraveler/BurpAuditAI</url>
+        <tag>HEAD</tag>
+    </scm>
+
+    <issueManagement>
+        <system>GitHub Issues</system>
+        <url>https://github.com/InterTraveler/BurpAuditAI/issues</url>
+    </issueManagement>
+
+    <!-- Project coordinates: groupId is the org namespace, artifactId is the plugin name, version is the release version. -->
+    <groupId>com.auditai</groupId>
+    <artifactId>burp-audit-ai</artifactId>
+    <version>0.1.0</version>
+
+    <properties>
+        <!-- Force UTF-8 across source, reports and the compiler, so non-ASCII source/log/payload text stays readable on Windows/Linux/CI. -->
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <maven.compiler.encoding>UTF-8</maven.compiler.encoding>
+        <!--
+            Compile target: Java 17 bytecode, aligned with the JDK 17 bundled
+            with Burp Suite 2023.3+. Using 'release' instead of source/target
+            locks both the source language level and the javac API surface,
+            preventing the "newer API compiled into older bytecode" hazard.
+        -->
+        <maven.compiler.release>17</maven.compiler.release>
+
+        <!-- Centralised dependency versions for single-point upgrades. -->
+        <montoya-api.version>2026.7</montoya-api.version>
+        <gson.version>2.10.1</gson.version>
+        <junit.version>5.10.2</junit.version>
+
+        <!-- Build plugin versions. -->
+        <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
+        <maven.shade.plugin.version>3.5.2</maven.shade.plugin.version>
+        <maven.surefire.plugin.version>3.2.5</maven.surefire.plugin.version>
+    </properties>
+
+    <dependencies>
+        <!--
+            Burp's official Montoya API.
+            scope=provided means visible at compile time, excluded at package time.
+            Burp supplies the same API when it loads the plugin; bundling it into
+            the JAR risks class-loader conflicts (NoSuchMethodError / ClassCastException
+            style surprises). So although the dependency is declared with compile
+            scope (so Maven / IDEA build and run classpaths see it, e.g. for the
+            PreviewApp runner), the maven-shade-plugin below uses artifactSet.excludes
+            to drop it from the fat JAR — production artifacts still ship without
+            montoya-api, supplied by Burp at runtime.
+        -->
+        <dependency>
+            <groupId>net.portswigger.burp.extensions</groupId>
+            <artifactId>montoya-api</artifactId>
+            <version>${montoya-api.version}</version>
+        </dependency>
+
+        <!--
+            Gson: JSON encode/decode for the AI interface (OpenAI-compatible
+            /chat/completions). Unlike montoya-api, this is a runtime dependency
+            that must ship with the plugin; the maven-shade-plugin below bundles
+            it into the same fat JAR.
+        -->
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>${gson.version}</version>
+        </dependency>
+
+        <!-- JUnit 5: unit testing framework. scope=test, participates in test compile/run only, not in the final artifact. -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Compiler plugin: honours release=17 from properties. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>${maven.compiler.plugin.version}</version>
+            </plugin>
+
+            <!-- Surefire: runs JUnit 5 tests under src/test on mvn test / mvn package. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>${maven.surefire.plugin.version}</version>
+                <configuration>
+                    <!--
+                        Force the test JVM to UTF-8. Windows defaults the
+                        console to GBK, which would garble non-ASCII assertion
+                        output and walkthrough logs.
+                    -->
+                    <argLine>-Dfile.encoding=UTF-8</argLine>
+                    <!--
+                        Redirect each test's System.out / System.err to
+                        target/surefire-reports/<class>-output.txt so the
+                        "actual output" stays inspectable alongside a failure.
+                    -->
+                    <redirectTestOutputToFile>true</redirectTestOutputToFile>
+                </configuration>
+            </plugin>
+
+            <!--
+                Shade: collapses gson and other third-party dependencies into
+                a single JAR so Burp can load the plugin with no extra classpath
+                setup. Defaults to replacing the main artifact: the final
+                output is still target/burp-audit-ai-<version>.jar.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>${maven.shade.plugin.version}</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <!--
+                                Drop signature files carried inside third-party JARs:
+                                duplicate *.SF / *.DSA / *.RSA on merge makes the JVM
+                                treat the resulting JAR as having a broken signature.
+                            -->
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <!-- Strip JAR signing files: they collide on merge and the result looks like a broken signature. -->
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                        <!-- The shaded uber-jar gets its own MANIFEST.MF; merging causes a duplicate-resource warning. -->
+                                        <exclude>META-INF/MANIFEST.MF</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                            <!--
+                                Explicitly exclude montoya-api: declared compile
+                                (so IDEA / Maven run a preview cleanly), but the
+                                final fat JAR must stay "no montoya-api", with Burp
+                                supplying it at runtime to avoid class-loader conflicts.
+                            -->
+                            <artifactSet>
+                                <excludes>
+                                    <exclude>net.portswigger.burp.extensions:montoya-api</exclude>
+                                </excludes>
+                            </artifactSet>
+                            <!-- Skip the dependency-reduced-pom.xml side artifact to keep the repo tidy. -->
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

@@ -1,0 +1,39 @@
+# ────────────────────────────────────────────────────────────────────────────
+# BurpAuditAI — EditorConfig (https://editorconfig.org)
+# All editors and IDEs that support EditorConfig will pick this up automatically.
+# ────────────────────────────────────────────────────────────────────────────
+root = true
+
+[*]
+charset                  = utf-8
+end_of_line              = lf
+insert_final_newline     = true
+trim_trailing_whitespace = true
+indent_style             = space
+indent_size              = 4
+
+[*.{java,xml,yml,yaml}]
+max_line_length          = 120
+
+[*.java]
+indent_size              = 4
+# Code style: project has been written with brace-on-next-line, but IntelliJ
+# will auto-detect; this only forces indentation and tab/space policy.
+
+[*.{json,yml,yaml,md}]
+indent_size              = 2
+
+[*.{bat,ps1,sh}]
+end_of_line              = lf
+
+[*.md]
+trim_trailing_whitespace = false
+# Markdown lines often need trailing double spaces (hard line break).
+
+[*.properties]
+# Java .properties MUST be ISO-8859-1 by spec. IntelliJ will warn otherwise.
+charset                  = latin1
+
+# Makefile, Gradle scripts → tab indent.
+[{Makefile,*.mk,*.gradle}]
+indent_style             = tab

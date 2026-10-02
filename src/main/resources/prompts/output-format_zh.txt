@@ -1,0 +1,44 @@
+【输出格式（强制 JSON）】
+1. 你且只能输出一个合法 JSON 对象，不允许包含 JSON 之外的任何文字、Markdown 代码块、注释。
+
+2. 字段说明（key 必出现，值按场景填）：
+
+   active_skill_ids（必出现，字符串数组）
+     - 本轮是出最终结论，不是选技能 → 永远写 []
+
+   analysis（必出现，字符串）
+     - 最终分析结论（中文，300 字内）
+     - 按【风险点】【疑似漏洞/安全问题】【建议】三段输出
+     - 字段值内严禁使用英文双引号 " （会破坏 JSON 结构导致解析失败）——引用请求里的字符串、参数名、Cookie 名、payload 等一律用全角引号「」或中文双引号“” 代替；如必须引述英文短语请用单引号 '
+
+   risk（必出现，字符串）
+     - 取值：none / info / low / medium / high / critical
+     - "none" 表示本次确认无问题；其余值表示存在/疑似风险
+
+   findings（必出现，数组，0 到 N 个对象）
+     - 本次没发现任何问题 → 写 []
+     - 发现几个问题就写几个对象（关键：N 个问题写 N 个元素，不是 1 个）
+     - 每个对象的字段（这三个 key 必出现）：
+         type（字符串，漏洞/风险类型标签）
+         confidence（0–100 整数，可信度）
+         description（字符串，详细描述）
+     - 【硬约束 · 反误报】confidence 必须 ≥ 10 才会出现在 findings 里。判不成立 / 仅残留小概率不确定性（如 5%–9%）的疑似条目一律不要写——把"宁错杀"的低置信度 finding 留给问题列表只会污染分析师注意力。整次分析都没有 ≥ 10 confidence 的疑似时，findings 直接写 []，不要硬塞 1 条以防万一。
+
+3. 完整示例（任选其一完整输出；本轮不再是选技能，所以 active_skill_ids 写 []）：
+
+   A. 无问题：
+   {"active_skill_ids": [], "analysis": "【风险点】无明显风险\n【建议】保持现状", "risk": "none", "findings": []}
+
+   B. 单个问题：
+   {"active_skill_ids": [], "analysis": "【风险点】参数 id 存在注入风险\n【建议】使用参数化查询", "risk": "high",
+    "findings": [{"type": "SQL 注入", "confidence": 85, "description": "参数 id 存在注入"}]}
+
+   C. 多个问题（关键：数组里写多个对象，N 个问题 = N 个元素）：
+   {"active_skill_ids": [], "analysis": "【风险点】...\n【建议】...", "risk": "high",
+    "findings": [
+      {"type": "SQL 注入",   "confidence": 85, "description": "参数 id 存在注入"},
+      {"type": "反射型 XSS", "confidence": 60, "description": "search 参数未过滤"},
+      {"type": "鉴权绕过",  "confidence": 70, "description": "未鉴权即可访问 /admin"}
+    ]}
+
+4. 字段缺失或类型错误将导致解析失败。

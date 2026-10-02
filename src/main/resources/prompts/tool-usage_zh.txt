@@ -1,0 +1,89 @@
+【重放工具 replay_request】
+改写请求再发一次拿真实响应，用于验证你没法从原始报文 100% 确定的怀疑。
+
+何时用（看到任一即建议调）：
+- 数值/字符串参数进 SQL 路径：id、user、search、order、limit、filter
+- 参数被回显到 HTML：q、search、comment、title、name、body
+- 鉴权相关参数：token、session、cookie、X-User-Id、Authorization
+- 文件/URL 类参数：file、path、url、redirect、callback
+
+怎么调（写到 tool_calls 数组，0～3 个对象）：
+  {"name":"replay_request",
+   "arguments":{
+     "reason":"<你为何重放>",
+     "replace_query_params":       { "key":"newValue", ... },
+     "replace_form_params":        { "key":"newValue", ... },
+     "replace_header_params":      { "Key":"newValue", ... },
+     "replace_json_params":        { "key":"newValue", ... },
+     "replace_path_params":        { "segValue":"newValue", ... },
+     "replace_multipart_params":   { "partName":"newValue", ... }
+   }}
+
+- 6 类参数按 HTTP 报文中的"位置"分开提交，每个 key 只在自己所属位置查找：
+    replace_query_params     →  ?k=v（URL 参数）
+    replace_form_params      →  application/x-www-form-urlencoded 的 body 参数
+    replace_header_params    →  请求头（大小写不敏感）
+    replace_json_params      →  JSON body 字段（支持点号路径，如 user.id）
+    replace_path_params      →  URL 路径的某段值（key = 段的当前字面值；只识别 path-only 场景）
+    replace_multipart_params →  multipart/form-data body 的 part（key = part 的 Content-Disposition.name）
+- value 是新值明文（未编码）。replay 工具会按参数所在位置做一次编码：
+    query / form / path 走 percent-encode（path 的空格用 %20）；json 走 JSON 字符串字面量编码；
+    header / multipart 不编码，原样透传。
+  - 默认给明文、让 agent 编码一次就是 wire 上的规范形式。
+  - **需要二次编码时（绕 WAF、测服务端多次解码等）**，自行在 payload 里按 RFC 3986 / JSON 语法
+    预写 %XX 或 \" / \\ 等转义序列，agent 会再编码一次得到 %2527 这种形式 —— 这是渗透的合法意图，
+    不要主动"归一化"或"解码"模型给的字符串。
+- 哪个分类的 key 必须出现在 user 段【可替换参数】清单里的对应分类下，否则服务端会拒绝
+  （错误信息会列出每个分类实际有哪些 key 可用）
+- 写错位置（如把 query 的 id 写进 replace_header_params）会直接报错，
+  不会跨位置兜底——避免静默命中"看起来名字一样但语义不同"的同名 key
+- replace_path_params 的 key 是"路径段的当前字面值"——把 path 按 / 切分后每个非空段都是
+  候选 key（不限于最后一段）。例：/api/users/123 → 段值 = [api, users, 123]，
+  改 {"123":"999"} → /api/users/999；改 {"api":"v2"} → /v2/users/123。
+  /api/123/bbb/321 → 段值 = [api, 123, bbb, 321]，可同时改 {"123":"999", "321":"666"}。
+  同段值多次出现 → 全部替换。要求 URL 无查询参数
+
+【硬约束 · 必读】
+调 replay_request 之前，**必须**先看 user 段【可替换参数】清单：
+- 清单里列出的 key 才能用，没列的 key 一律不要写，写了会被服务端拒绝并浪费一次预算
+- 清单为空（含显式的"无可替换参数"提示）→ 直接 tool_calls=[] 给最终结论，**不要**套用下面示例的 key
+- 清单里只有 header → 只能改 header，**不要**凭空假设 query/form/json/path/multipart 里有名为 id/user 的参数
+- 不要照搬"id / 1'"这种通用模板——请求里实际有什么 key 完全取决于当前请求
+
+示例（闭合 query 参数，SQL 注入）：
+  {"name":"replay_request",
+   "arguments":{
+     "reason":"闭合 id 单引号看是否回显 SQL 错误",
+     "replace_query_params":{"id":"1'"}
+   }}
+
+示例（改 form body，登录/注册注入）：
+  {"name":"replay_request",
+   "arguments":{
+     "reason":"测试用户名注入",
+     "replace_form_params":{"username":"admin' OR 1=1--"}
+   }}
+
+示例（改 header 验证越权 / 改 JSON 嵌套字段 / 改 URL 路径段值 / 改 multipart part）——任选其一：
+  {"name":"replay_request",
+   "arguments":{
+     "reason":"伪造管理员身份",
+     "replace_header_params":{"X-User-Id":"admin"}
+   }}
+  {"name":"replay_request",
+   "arguments":{
+     "reason":"嵌套路径注入",
+     "replace_json_params":{"user.id":"1' OR 1=1--"}
+   }}
+  {"name":"replay_request",
+   "arguments":{
+     "reason":"REST 风格路径参数注入（改 /api/users/123 的 123）",
+     "replace_path_params":{"123":"1' OR 1=1--"}
+   }}
+  {"name":"replay_request",
+   "arguments":{
+     "reason":"文件上传路径穿越（multipart file 字段 value 改 ../ 路径，触发服务端写盘 / 回读时的路径处理）",
+     "replace_multipart_params":{"file":"../../file1.txt"}
+   }}
+
+收尾：3 次预算用尽 或 重放结果已能 100% 确认/排除时，tool_calls 写 []。仅对当前请求的目标服务调用，禁止跨 host/port/scheme。

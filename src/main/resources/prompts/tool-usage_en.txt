@@ -1,0 +1,90 @@
+[Replay tool: replay_request]
+Mutate a request and resend it to get the real response, used to verify suspicions you cannot confirm 100% from the original message alone.
+
+When to call (any of these is a trigger):
+- Numeric / string params entering SQL: id, user, search, order, limit, filter
+- Params reflected into HTML: q, search, comment, title, name, body
+- Auth-related params: token, session, cookie, X-User-Id, Authorization
+- File / URL params: file, path, url, redirect, callback
+
+How to call (write 0..3 objects in the tool_calls array):
+  {"name":"replay_request",
+   "arguments":{
+     "reason":"<why>",
+     "replace_query_params":       { "key":"newValue", ... },
+     "replace_form_params":        { "key":"newValue", ... },
+     "replace_header_params":      { "Key":"newValue", ... },
+     "replace_json_params":        { "key":"newValue", ... },
+     "replace_path_params":        { "segValue":"newValue", ... },
+     "replace_multipart_params":   { "partName":"newValue", ... }
+   }}
+
+- The 6 maps are split by position in the HTTP message; each key is ONLY looked up in its own position:
+    replace_query_params     →  ?k=v (URL params)
+    replace_form_params      →  application/x-www-form-urlencoded body params
+    replace_header_params    →  request headers (case-insensitive)
+    replace_json_params      →  JSON body fields (dot paths supported, e.g. user.id)
+    replace_path_params      →  any path segment by its current literal value (not just the last one; path-only requests only)
+    replace_multipart_params →  multipart/form-data body parts (key = part's Content-Disposition.name)
+- Values are raw strings (unencoded). The replay tool encodes once based on the param's position:
+    query / form / path → percent-encode (spaces in path → %20); json → JSON string literal;
+    header / multipart → pass through as-is.
+  - Default: give raw values, the agent encodes once → wire-ready canonical form.
+  - **When you need double-encoding** (WAF bypass, probing server-side multi-decode, etc.),
+    pre-write the %XX or \" / \\ escapes yourself per RFC 3986 / JSON syntax. The agent will
+    encode once more → %2527 on the wire. This is a legitimate pen-test intent; do NOT
+    pre-normalize or pre-decode the payload yourself.
+- Each key MUST appear in the [Addressable params] section under the matching category; otherwise the server rejects the call
+  (the error message lists which keys are actually available in each category)
+- Wrong position (e.g. putting query's id in replace_header_params) → immediate error, no cross-position fallback
+  (avoids silently hitting a same-named but semantically different key elsewhere)
+- replace_path_params keys are the LITERAL VALUES of the path's non-empty segments. Example:
+  /api/users/123 → segments = [api, users, 123]. Send {"123":"999"} → /api/users/999,
+  or send {"api":"v2"} → /v2/users/123. /api/123/bbb/321 → segments = [api, 123, bbb, 321],
+  send {"123":"999", "321":"666"} to mutate both at once. Same value appearing multiple times
+  → all occurrences are replaced. Requires a path-only URL (no ?query).
+
+[HARD CONSTRAINT — read first]
+Before calling replay_request, you MUST check the [Addressable params] section in the user turn:
+- Only use keys that actually appear in that list; keys not listed will be rejected by the server and waste a budget slot
+- If the list is empty (including the explicit "no addressable params" hint) → tool_calls=[] and give the final conclusion directly; DO NOT reuse the example keys below
+- If the list only has headers → only mutate headers; do NOT assume query/form/json/path/multipart has a key named id/user
+- Do NOT copy the generic `id / 1'` template — which keys exist depends entirely on the current request
+
+Example (close a single-quote SQLi on a query param):
+  {"name":"replay_request",
+   "arguments":{
+     "reason":"close id quote to see if SQL error is reflected",
+     "replace_query_params":{"id":"1'"}
+   }}
+
+Example (mutate form body, login/register injection):
+  {"name":"replay_request",
+   "arguments":{
+     "reason":"test username injection",
+     "replace_form_params":{"username":"admin' OR 1=1--"}
+   }}
+
+Example (mutate header / mutate nested JSON / mutate URL path segment by value / mutate multipart part) — pick one:
+  {"name":"replay_request",
+   "arguments":{
+     "reason":"forge admin identity",
+     "replace_header_params":{"X-User-Id":"admin"}
+   }}
+  {"name":"replay_request",
+   "arguments":{
+     "reason":"nested path injection",
+     "replace_json_params":{"user.id":"1' OR 1=1--"}
+   }}
+  {"name":"replay_request",
+   "arguments":{
+     "reason":"REST path param injection (mutate 123 in /api/users/123)",
+     "replace_path_params":{"123":"1' OR 1=1--"}
+   }}
+  {"name":"replay_request",
+   "arguments":{
+     "reason":"file upload path traversal (mutate multipart file value to ../ path, triggers server-side path handling on write/read)",
+     "replace_multipart_params":{"file":"../../file1.txt"}
+   }}
+
+Wrap up: tool_calls: [] when the 3-call budget is exhausted OR the replay results already confirm/exclude 100%. Only call against the current target service; cross host/port/scheme replays are blocked.

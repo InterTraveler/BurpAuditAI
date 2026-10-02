@@ -1,0 +1,69 @@
+# ────────────────────────────────────────────────────────────────────────────
+# BurpAuditAI — git ignore rules
+# Java 17 + Maven + IntelliJ IDEA
+# ────────────────────────────────────────────────────────────────────────────
+
+# ── Maven build output ─────────────────────────────────────────────────────
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+
+# ── IntelliJ IDEA ──────────────────────────────────────────────────────────
+*.iml
+*.iws
+*.ipr
+out/
+.idea/
+!.idea/icon.png
+
+# ── Java / JVM runtime ─────────────────────────────────────────────────────
+*.class
+*.log
+*.log.*
+hs_err_pid*
+replay_pid*
+
+# ── OS generated files ─────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ── Local AI assistant workspace metadata ──────────────────────────────────
+# Project-agnostic plan/progress files produced by local AI coding agents.
+.github/modernize/
+
+# ── Project-local transient data (per-machine, never commit) ──────────────
+# Montoya API local extract
+montoya-extract/
+# removed-test archive (历史归档，源码不入主分支)
+.archive/
+*.auditai-backup
+# runtime stream/log dumps (model_stream.json, etc.)
+log/
+__pycache__/
+# 临时禁用的测试 / 源码（保留文件但跳过编译）
+*.disabled
+
+# ── Secrets — never commit even by accident ────────────────────────────────
+# Put real keys in Burp's Settings tab; this repo must stay clean.
+.env
+.env.*
+!.env.example
+**/secrets.yaml
+**/secrets.json
+**/credentials.*
+**/api-keys.*
+
+# ── Editor swap/temp files ─────────────────────────────────────────────────
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
