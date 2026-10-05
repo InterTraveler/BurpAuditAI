@@ -101,6 +101,16 @@ public final class FindingStore implements AutoCloseable {
     }
 
     /**
+     * 用已解析好的会话根目录构建问题库。
+     *
+     * @param sessionDirectory {@code SessionPaths.createProjectDirectory} 的输出路径。
+     * @throws IOException 无法创建存储目录时抛出。
+     */
+    public FindingStore(Path sessionDirectory) throws IOException {
+        this(sessionDirectory, DEFAULT_MAX_FINDINGS, DEFAULT_MAX_CONTEXTS);
+    }
+
+    /**
      * 包级构造：测试可调，仅控制 findings 上限（contexts 用默认值）。
      */
     FindingStore(Path sessionDirectory, int maxFindings) throws IOException {

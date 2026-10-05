@@ -109,29 +109,36 @@ public final class AuditAiExtension implements BurpExtension {
         FindingStore findingStore = null;
         // 用户技能目录挂在 sessionRoot 下：与历史库 / 问题库同级，独立子目录。
         Path sessionRoot = null;
-        String projectId = SessionPaths.isDiskProject(api) ? api.project().id() : SessionPaths.TEMPORARY_PROJECT_ID;
+        String projectId = SessionPaths.resolveProjectId(api);
+        // 会话根目录只解析一次，历史库与问题库共用。
         try {
             sessionRoot = SessionPaths.createProjectDirectory(api.extension().filename(), projectId);
-            final AnalysisHistoryStore createdHistoryStore = new AnalysisHistoryStore(sessionRoot,
-                    AnalysisHistoryStore.DEFAULT_MAX_ENTRIES,
-                    AnalysisHistoryStore.DEFAULT_MAX_ENTRY_BYTES,
-                    errorLog);
-            historyStore = createdHistoryStore;
-            api.extension().registerUnloadingHandler(() -> closeHistoryStore(createdHistoryStore));
-            api.logging().logToOutput("AuditAI Project：" + api.project().name()
-                    + "，存储模式：" + (SessionPaths.TEMPORARY_PROJECT_ID.equals(projectId) ? "Temporary" : "Disk")
-                    + "，已分析历史目录：" + historyStore.sessionDirectory());
         } catch (IOException e) {
-            api.logging().logToError("AuditAI 无法创建已分析历史存储，'历史'页签将显示空态。", e);
+            api.logging().logToError("AuditAI 无法创建会话数据目录，'历史'与'问题'页签将显示空态。", e);
         }
-        // 问题库独立建一次：失败时问题页签会显示空态，不影响其它功能。
-        try {
-            final FindingStore createdFindingStore = new FindingStore(api.extension().filename(), projectId);
-            findingStore = createdFindingStore;
-            api.extension().registerUnloadingHandler(() -> closeFindingStore(createdFindingStore));
-            api.logging().logToOutput("AuditAI 问题库目录：" + findingStore.sessionDirectory());
-        } catch (IOException e) {
-            api.logging().logToError("AuditAI 无法创建问题存储，问题页签将显示空态。", e);
+        if (sessionRoot != null) {
+            try {
+                final AnalysisHistoryStore createdHistoryStore = new AnalysisHistoryStore(sessionRoot,
+                        AnalysisHistoryStore.DEFAULT_MAX_ENTRIES,
+                        AnalysisHistoryStore.DEFAULT_MAX_ENTRY_BYTES,
+                        errorLog);
+                historyStore = createdHistoryStore;
+                api.extension().registerUnloadingHandler(() -> closeHistoryStore(createdHistoryStore));
+                api.logging().logToOutput("AuditAI Project：" + api.project().name()
+                        + "，存储模式：" + (SessionPaths.TEMPORARY_PROJECT_ID.equals(projectId) ? "Temporary" : "Disk")
+                        + "，已分析历史目录：" + historyStore.sessionDirectory());
+            } catch (IOException e) {
+                api.logging().logToError("AuditAI 无法创建已分析历史存储，'历史'页签将显示空态。", e);
+            }
+            // 问题库复用已解析的 sessionRoot；失败时问题页签显示空态，不影响其它功能。
+            try {
+                final FindingStore createdFindingStore = new FindingStore(sessionRoot);
+                findingStore = createdFindingStore;
+                api.extension().registerUnloadingHandler(() -> closeFindingStore(createdFindingStore));
+                api.logging().logToOutput("AuditAI 问题库目录：" + findingStore.sessionDirectory());
+            } catch (IOException e) {
+                api.logging().logToError("AuditAI 无法创建问题存储，问题页签将显示空态。", e);
+            }
         }
 
         // 5. 创建分析编排器（内部含异步执行器，AI 调用不阻塞 UI 线程）。
