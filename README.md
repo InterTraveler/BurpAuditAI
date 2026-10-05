@@ -820,6 +820,10 @@ Copyright 2024-2026 BurpAuditAI Contributors
 > 使用 **OpenAI 兼容协议**的 LLM 分析 HTTP 报文，并提供 **可插拔的 SKILLS
 > 技能系统**，由你（以及模型）决定每一份报文使用哪些审计视角。
 
+### 🎬 视频演示：[https://www.bilibili.com/video/BV1MiHs63Ev3/](https://www.bilibili.com/video/BV1MiHs63Ev3/)
+
+> 5 分钟看完安装、AI 端点配置、手动分析、被动分析、技能开关的完整流程。
+
 ### 核心特性
 
 - **Repeater 风格的多页签手动分析。** 在 Proxy / Repeater / Intruder
