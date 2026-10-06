@@ -84,7 +84,7 @@
 
         <!-- Centralised dependency versions for single-point upgrades. -->
         <montoya-api.version>2026.7</montoya-api.version>
-        <gson.version>2.10.1</gson.version>
+        <gson.version>2.14.0</gson.version>
         <junit.version>5.10.2</junit.version>
 
         <!-- Build plugin versions. -->
