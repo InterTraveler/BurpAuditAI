@@ -67,7 +67,7 @@
     <!-- Project coordinates: groupId is the org namespace, artifactId is the plugin name, version is the release version. -->
     <groupId>com.auditai</groupId>
     <artifactId>burp-audit-ai</artifactId>
-    <version>0.1.0</version>
+    <version>0.1.1</version>
 
     <properties>
         <!-- Force UTF-8 across source, reports and the compiler, so non-ASCII source/log/payload text stays readable on Windows/Linux/CI. -->
