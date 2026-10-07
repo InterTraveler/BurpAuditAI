@@ -31,8 +31,11 @@ BurpAuditAI is a **local Burp Suite extension** that:
 - Reads HTTP traffic visible to Burp (Proxy / Repeater / Intruder / etc.).
 - Sends **selected** traffic to a user-configured AI endpoint
   (after default header redaction and binary-body truncation).
-- Stores per-project traffic metadata in
-  `<burp-install>/AuditAIData/projects/<projectId>/` (or fallbacks).
+- Stores per-project traffic metadata in the data root
+  (`<burp-install-parent>/AuditAI Data/projects/<projectId>/` by
+  default, or `%LOCALAPPDATA%\AuditAI Data\projects\<projectId>\`
+  for system-installed Burp; override via the `AUDITAI_HOME`
+  environment variable).
 - Persists configuration and an XOR-obfuscated API key in Montoya
   `Preferences`.
 

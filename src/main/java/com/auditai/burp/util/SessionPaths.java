@@ -7,20 +7,31 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
 /**
- * 定位当前 Burp 项目的会话目录：专业版 {@code Burp安装目录\AuditAIData\projects\<id>\}，
- * 社区版 {@code Burp安装目录\AuditAIData\temporary\}。回退顺序：Burp 安装目录 →
- * 插件 JAR 所在目录 → 用户数据目录（%LOCALAPPDATA% / ~/.local/share）。
+ * 定位当前 Burp 项目的会话目录：专业版 {@code <数据根>/projects/<id>/}，
+ * 社区版 {@code <数据根>/temporary/}。
+ *
+ * <p>数据根解析优先级：</p>
+ * <ol>
+ *   <li>环境变量 {@value #AUDITAI_HOME_ENV_VAR}。末尾（大小写不敏感）等于 #DATA_DIRECTORY_NAME
+ *       时原样使用（如 {@code E:\AuditAI Data}），否则追加一层（如 {@code AUDITAI_HOME=E:\aa} → {@code E:\aa\AuditAI Data}）。
+ *       设了但写不动不回退（视为用户显式意图）。</li>
+ *   <li>Burp 安装目录的同级（便携安装下便于整包备份；系统级安装通常不可写，自动下一档）。</li>
+ *   <li>OS 标准用户数据目录：Windows {@code %LOCALAPPDATA%\AuditAI Data}，
+ *       Unix {@code $HOME/.local/share/AuditAI Data}。</li>
+ * </ol>
  */
 public final class SessionPaths {
 
-    /** 顶级数据目录名（与早期 store 命名保持一致）。 */
-    public static final String DATA_DIRECTORY_NAME = "AuditAIData";
+    /** 顶级数据目录名（同时作为环境变量 {@value #AUDITAI_HOME_ENV_VAR} 末段匹配的判定值）。 */
+    public static final String DATA_DIRECTORY_NAME = "AuditAI Data";
+
+    /** 用户重定向数据根目录的环境变量名。 */
+    public static final String AUDITAI_HOME_ENV_VAR = "AUDITAI_HOME";
 
     /** 临时项目目录名（社区版 Burp / 专业版临时项目）。 */
     public static final String TEMPORARY_PROJECT_ID = "temporary";
@@ -44,7 +55,7 @@ public final class SessionPaths {
 
     /**
      * @param api Montoya API 门面。
-     * @return 当前 Burp 是否为专业版（{@link BurpSuiteEdition#PROFESSIONAL}）。
+     * @return 当前 Burp 是否为专业版（BurpSuiteEdition#PROFESSIONAL）。
      */
     public static boolean isProfessionalEdition(MontoyaApi api) {
         return api.burpSuite().version().edition() == BurpSuiteEdition.PROFESSIONAL;
@@ -63,7 +74,7 @@ public final class SessionPaths {
     /**
      * 解析当前会话应使用的项目标识：专业版 + 磁盘项目 + 存在稳定项目 ID → 返回项目 ID
      * （落到 {@code projects/<id>/}）；其余（社区版 / 企业版 / 专业版临时项目 / 项目 ID
-     * 为空）→ 返回 {@link #TEMPORARY_PROJECT_ID}（落到 {@code temporary/}）。
+     * 为空）→ 返回 #TEMPORARY_PROJECT_ID（落到 {@code temporary/}）。
      */
     public static String resolveProjectId(MontoyaApi api) {
         if (isProfessionalEdition(api) && isDiskProject(api)) {
@@ -76,45 +87,97 @@ public final class SessionPaths {
     }
 
     /**
-     * 取当前项目的会话根目录：{@code projects/<id>/}（专业版磁盘项目）或
-     * {@code temporary/}（社区版 / 临时项目）。任意一个候选根目录可写即返回；
-     * 全部失败抛 IOException。
+     * 取当前项目的会话根目录：{@code <数据根>/projects/<id>/}（专业版磁盘项目）或
+     * {@code <数据根>/temporary/}（社区版 / 临时项目）。
+     *
+     * @param extensionFilename 保留参数，当前未使用。
+     * @param projectId         #resolveProjectId(MontoyaApi) 的输出。
+     * @throws IOException 数据根不可写。
      */
     public static Path createProjectDirectory(String extensionFilename, String projectId) throws IOException {
-        List<Path> roots = new ArrayList<>();
-        Path burpHome = burpInstallationDirectory();
-        if (burpHome != null) {
-            roots.add(burpHome.resolve(DATA_DIRECTORY_NAME));
-        }
-        Path extensionRoot = extensionDataRoot(extensionFilename);
-        if (!roots.contains(extensionRoot)) {
-            roots.add(extensionRoot);
-        }
-        roots.add(fallbackDataRoot());
-        IOException failure = null;
+        return createProjectDirectoryAtRoot(null, projectId);
+    }
+
+    /**
+     * 仅测试用：给定数据根直接创建会话目录，绕过 env / Burp 同级 / 兜底三级解析；
+     * {@code dataRoot} 为 null 时等价于 #createProjectDirectory(String, String)。
+     */
+    static Path createProjectDirectoryAtRoot(Path dataRoot, String projectId) throws IOException {
         String safeProjectId = safePathPart(projectId == null || projectId.isBlank()
                 ? TEMPORARY_PROJECT_ID : projectId);
-        for (Path root : roots) {
+        if (dataRoot != null) {
+            return resolveProjectDirectory(dataRoot, safeProjectId);
+        }
+
+        Path envRoot = resolveEnvOverride();
+        if (envRoot != null) {
+            return resolveProjectDirectory(envRoot, safeProjectId);
+        }
+
+        Path burpSibling = resolveBurpSiblingRoot();
+        if (burpSibling != null) {
             try {
-                Path directory = TEMPORARY_PROJECT_ID.equals(safeProjectId)
-                        ? root.resolve(TEMPORARY_PROJECT_ID)
-                        : root.resolve(PROJECTS_DIRECTORY_NAME).resolve(safeProjectId);
-                Files.createDirectories(directory);
-                return directory;
-            } catch (IOException e) {
-                failure = e;
+                return resolveProjectDirectory(burpSibling, safeProjectId);
+            } catch (IOException ignored) {
+                // 同级不可写 → 下一档。
             }
         }
-        throw failure != null ? failure : new IOException("无法创建数据目录：所有候选根均不可写");
+
+        return resolveProjectDirectory(fallbackDataRoot(), safeProjectId);
+    }
+
+    /** 把 {@code <数据根>[/projects/<id> | /temporary]} 这条路径真实创建出来。 */
+    private static Path resolveProjectDirectory(Path root, String safeProjectId) throws IOException {
+        Path directory = TEMPORARY_PROJECT_ID.equals(safeProjectId)
+                ? root.resolve(TEMPORARY_PROJECT_ID)
+                : root.resolve(PROJECTS_DIRECTORY_NAME).resolve(safeProjectId);
+        Files.createDirectories(directory);
+        return directory;
+    }
+
+    /**
+     * 解析 {@value #AUDITAI_HOME_ENV_VAR}：空 / 未设置 → null；末尾（大小写不敏感）等于
+     * #DATA_DIRECTORY_NAME → 原样返回；否则追加一层 #DATA_DIRECTORY_NAME。
+     */
+    static Path resolveEnvOverride() {
+        return resolveEnvOverride(System.getenv(AUDITAI_HOME_ENV_VAR));
+    }
+
+    /** #resolveEnvOverride() 的可注入版，便于单元测试不污染 JVM 全局环境变量。 */
+    static Path resolveEnvOverride(String envValue) {
+        if (envValue == null || envValue.isBlank()) {
+            return null;
+        }
+        Path base = Paths.get(envValue.trim());
+        Path lastSegment = base.getFileName();
+        if (lastSegment != null && DATA_DIRECTORY_NAME.equalsIgnoreCase(lastSegment.toString())) {
+            return base;
+        }
+        return base.resolve(DATA_DIRECTORY_NAME);
+    }
+
+    /**
+     * Burp 安装目录的"父级"（即与 Burp 同级）作为数据根。Burp 安装目录无法推断时返回 null。
+     */
+    static Path resolveBurpSiblingRoot() {
+        Path burpHome = burpInstallationDirectory();
+        if (burpHome == null) {
+            return null;
+        }
+        Path parent = burpHome.getParent();
+        if (parent == null) {
+            return null;
+        }
+        return parent.resolve(DATA_DIRECTORY_NAME);
     }
 
     /**
      * 推断当前 JVM 进程对应的 Burp 安装根目录。
      *
-     * <p>Montoya 没有直接暴露 Burp 安装目录。本方法用 {@link ProcessHandle} 拿当前
+     * <p>Montoya 没有直接暴露 Burp 安装目录。本方法用 ProcessHandle 拿当前
      * 进程命令行起点（{@code java} / {@code javaw} / {@code BurpSuitePro.exe} 等），
      * 先判断起点本身是否为 Burp 启动器（原生启动器内嵌 JVM 的场景），再向上回溯找
-     * Burp 的启动器 / JAR。识别名单见 {@link #BURP_ARTIFACT_NAMES}。</p>
+     * Burp 的启动器 / JAR。识别名单见 #BURP_ARTIFACT_NAMES。</p>
      *
      * @return Burp 安装目录的绝对路径；推断不到（极端环境：进程命令行异常、文件布局
      *         非标准）时返回 null。
@@ -155,16 +218,6 @@ public final class SessionPaths {
         String lower = fileName.toLowerCase(Locale.ROOT);
         return (lower.startsWith("burpsuite_pro") || lower.startsWith("burpsuite_community")
                 || lower.startsWith("burpsuite_free")) && lower.endsWith(".jar");
-    }
-
-    private static Path extensionDataRoot(String extensionFilename) {
-        if (extensionFilename == null || extensionFilename.isBlank()) {
-            return Paths.get(System.getProperty("user.home")).resolve(DATA_DIRECTORY_NAME);
-        }
-        Path jarPath = Paths.get(extensionFilename);
-        Path parent = jarPath.toAbsolutePath().getParent();
-        return parent != null ? parent.resolve(DATA_DIRECTORY_NAME)
-                : Paths.get(System.getProperty("user.home")).resolve(DATA_DIRECTORY_NAME);
     }
 
     private static Path fallbackDataRoot() {

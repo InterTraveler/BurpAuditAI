@@ -76,18 +76,21 @@
 
 ## Quick Start
 
+### 1. Clone and build (Windows / PowerShell)
 ```powershell
-# 1. Clone and build (Windows / PowerShell)
 git clone https://github.com/InterTraveler/BurpAuditAI.git
 cd BurpAuditAI
 .\build.ps1            # or: mvn clean package, if you already have JDK + Maven on PATH
-
-# 2. Load in Burp:
-#    Extender > Extensions > Add > Java >
-#    pick burp-audit-ai-*.jar under target\
-
-# 3. In Burp: AuditAI tab > Settings > fill Base URL + Model > Test > Save
-#    tick [Enable passive traffic analysis]: Proxy traffic is analyzed automatically
+```
+### 2. Load in Burp:
+```
+Extender > Extensions > Add > Java >
+pick burp-audit-ai-*.jar under target\
+```
+### 3. In Burp: AuditAI tab
+```
+Settings > fill Base URL + Model > Test > Save
+tick [Enable passive traffic analysis]: Proxy traffic is analyzed automatically
 ```
 
 ---
@@ -753,10 +756,13 @@ default, sensitive headers (Authorization, Cookie, X-API-Key, Bearer, JWT,
 
 **Q: Where is my Proxy history stored?**
 
-**A:** In `<burp-install>/AuditAIData/projects/<projectId>/bodies/`
-(or fallbacks). Bodies are gzip-compressed on disk; the in-memory
-index contains only metadata. Delete the directory to clear it; the
-plugin will recreate it on next launch.
+**A:** In the data root (sibling of the Burp install dir by default —
+e.g. `D:\tools\AuditAI Data\projects\<projectId>\bodies\`, or
+`%LOCALAPPDATA%\AuditAI Data\projects\<projectId>\bodies\` for
+system-installed Burp). Override via the `AUDITAI_HOME` environment
+variable. Bodies are gzip-compressed on disk; the in-memory index
+contains only metadata. Delete the directory to clear it; the plugin
+will recreate it on next launch.
 
 **Q: Where is my API key stored?**
 
@@ -820,10 +826,6 @@ Copyright 2024-2026 BurpAuditAI Contributors
 > 使用 **OpenAI 兼容协议**的 LLM 分析 HTTP 报文，并提供 **可插拔的 SKILLS
 > 技能系统**，由你（以及模型）决定每一份报文使用哪些审计视角。
 
-### 🎬 视频演示：[https://www.bilibili.com/video/BV1MiHs63Ev3/](https://www.bilibili.com/video/BV1MiHs63Ev3/)
-
-> 5 分钟看完安装、AI 端点配置、手动分析、被动分析、技能开关的完整流程。
-
 ### 核心特性
 
 - **Repeater 风格的多页签手动分析。** 在 Proxy / Repeater / Intruder
@@ -866,18 +868,21 @@ Copyright 2024-2026 BurpAuditAI Contributors
 
 ## 快速开始
 
+### 1. 克隆并构建（Windows / PowerShell）
 ```powershell
-# 1. 克隆并构建（Windows / PowerShell）
 git clone https://github.com/InterTraveler/BurpAuditAI.git
 cd BurpAuditAI
 .\build.ps1            # 或：JDK + Maven 已在 PATH 上时，直接 mvn clean package
-
-# 2. 在 Burp 中加载：
-#    Extender > Extensions > Add > Java >
-#    选择 target\ 下的 burp-audit-ai-*.jar
-
-# 3. 在 Burp 顶部 AuditAI 页签 > 设置 > 填写 Base URL + 模型 > 测试 > 保存
-#    并勾选【启用被动流量分析】：之后 Proxy 流量自动出结果，无需手动点 Analyze
+```
+### 2. 在 Burp 中加载：
+```
+Extender > Extensions > Add > Java >
+选择 target\ 下的 burp-audit-ai-*.jar
+```
+### 3. 在 Burp 顶部 AuditAI 页签
+```
+设置 > 填写 Base URL + 模型 > 测试 > 保存
+并勾选【启用被动流量分析】：之后 Proxy 流量自动出结果，无需手动点 Analyze
 ```
 
 ---
@@ -1474,8 +1479,11 @@ BurpAuditAI/
 
 **Q：Proxy 历史存在哪里？**
 
-**答：** 存在 `<burp-install>/AuditAIData/projects/<projectId>/bodies/`（或回退目录）。
-Bodies gzip 落盘；内存索引只含元数据。删目录即清空，下次启动会重建。
+**答：** 存在数据根目录下（Burp 同级目录的 `AuditAI Data/`，如
+`D:\tools\AuditAI Data\projects\<projectId>\bodies\`；系统级 Burp
+安装时回退到 `%LOCALAPPDATA%\AuditAI Data\projects\<projectId>\bodies\`）。
+可用环境变量 `AUDITAI_HOME` 重定向到任意位置。Bodies gzip 落盘；内存索引
+只含元数据。删目录即清空，下次启动会重建。
 
 **Q：API Key 存在哪里？**
 

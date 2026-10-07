@@ -31,28 +31,14 @@ import java.util.function.Consumer;
 /**
  * "历史"页签背后的落盘式 FIFO 容器。
  *
- * <p>职责：</p>
- * <ul>
- *   <li><b>数据域</b>：仅记录"经 AI 分析过的报文"（手动 / 被动分析完成回调），
- *       不再保存全量代理流量；</li>
- *   <li><b>落盘</b>：元数据写入 {@code history/index.json}，正文 gzip + SHA-256 去重
- *       写入 {@code history/bodies/}（与老 {@code ProxyTrafficStore} 同款落盘布局，
- *       目录独立避免命名冲突）；</li>
- *   <li><b>容量淘汰</b>：默认 500 条（{@link #DEFAULT_MAX_ENTRIES}）按插入顺序
- *       淘汰最旧；单条 request+response 字节超 {@link #DEFAULT_MAX_ENTRY_BYTES}
- *       （2MB）时按 {@link BodyStorage#prepareStoredMessage} 策略裁剪；</li>
- *   <li><b>线程安全</b>：{@link #add} / {@link #delete} / {@link #clear} / {@link #close} 在
- *       {@link #lock} 内串行化；{@link #list} / {@link #get} 加同一把锁保证读
- *       到一致的快照。监听器回调允许在锁外执行（避免回调里死锁）。</li>
- * </ul>
+ * <p>仅记录"经 AI 分析过的报文"（手动 / 被动分析完成回调），不保存全量代理流量。
+ * 元数据写入 {@code history/index.json}，正文 gzip + SHA-256 去重写入
+ * {@code history/bodies/}。路径形如 {@code <数据根>/projects/<id>/history/} 或
+ * {@code <数据根>/temporary/history/}（数据根见 SessionPaths 类）。</p>
  *
- * <p>路径策略：复用 {@code ProxyTrafficStore.createProjectDirectory} 现有的
- * 专业版（{@code projects/<id>/}）/ 社区版（{@code temporary/}）分流逻辑；
- * 本 store 始终在结果路径下建 {@code history/} 子目录。完整路径形如：</p>
- * <ul>
- *   <li>专业版：{@code <Burp安装目录>\AuditAIData\projects\<id>\history\}</li>
- *   <li>社区版：{@code <Burp安装目录>\AuditAIData\temporary\history\}</li>
- * </ul>
+ * <p>#add / #delete / #clear / #close 在 #lock 内
+ * 串行化；#list / #get 加同一把锁保证读到一致快照。监听器回调在锁外执行
+ * （避免回调里死锁）。</p>
  */
 public final class AnalysisHistoryStore implements AutoCloseable {
 
@@ -93,7 +79,7 @@ public final class AnalysisHistoryStore implements AutoCloseable {
 
     /**
      * 正文目录的<b>增量维护</b>磁盘占用字节数（锁内读写）。新建 gzip 文件时累加
-     * 实际文件大小、删除文件时扣减，{@link #evictIfNeeded} 直接与阈值比较，
+     * 实际文件大小、删除文件时扣减，#evictIfNeeded 直接与阈值比较，
      * 不再每次入库都全目录 {@code Files.walk} 扫描（500+ 文件时是 O(N²) 磁盘 IO）。
      */
     private long totalBodyBytes;
@@ -108,16 +94,9 @@ public final class AnalysisHistoryStore implements AutoCloseable {
     private boolean closed;
 
     /**
-     * 索引落盘调度器：单线程守护线程，专门处理"延迟落盘"和"窗口期补落盘"。
-     *
-     * <p>风险：旧实现只在 {@code add} 调用时根据"距上次落盘是否已过 500ms"决定
-     * 是否 flush——若 500ms 窗口内连续 add 多次，第一次 flush、其余只置
-     * {@link #persistDirty} 标位，但<b>没有任何调度器</b>在窗口期结束或后续
-     * add 进来时把 dirty 数据补写：进程退出即丢数据。</p>
-     *
-     * <p>实现：每次 {@code add} 走 {@code schedule(500ms)} 排一个一次性任务，
-     * 任务本身做"若 dirty 则 flush"——覆盖了"窗口期后无新 add 进来"和"窗口期
-     * 内多次 add"两种丢数据场景。任务幂等（重复 schedule 不会并发 flush）。</p>
+     * 索引落盘调度器：单线程守护线程，处理"延迟落盘"和"窗口期补落盘"。
+     * 每次 add 走 {@code schedule(500ms)} 排一个一次性任务做"若 dirty 则 flush"，
+     * 覆盖"窗口期后无新 add 进来"和"窗口期内多次 add"两种丢数据场景；任务幂等。
      */
     private final ScheduledExecutorService persister = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "auditai-history-persister");
@@ -125,11 +104,7 @@ public final class AnalysisHistoryStore implements AutoCloseable {
         return t;
     });
 
-    /**
-     * 当前已调度但未执行的落盘任务引用：用于"窗口期内多次 add 只保留最新一次调度"
-     * 的去重——避免连续 schedule 出 N 个并发任务互相竞争 {@link #flushPersistLocked}。
-     * 调度器本身是单线程，但避免 N 个任务排队消耗内存仍是必要的。
-     */
+    /** 当前已调度但未执行的落盘任务引用：用于"窗口期内多次 add 只保留最新一次调度"去重。 */
     private volatile ScheduledFuture<?> pendingFlush;
 
     /** 错误日志回调（不允许 null，调用方必须注入）；用于索引损坏、落盘失败等诊断信息。 */
@@ -139,13 +114,11 @@ public final class AnalysisHistoryStore implements AutoCloseable {
      * 构造器：建 {@code <sessionRoot>/history/} 数据目录 + 一次性清理老
      * {@code ProxyTrafficStore} 留下的 {@code bodies/} + {@code index.json}（迁移期设计）。
      *
-     * @param sessionRoot     {@code ProxyTrafficStore.createProjectDirectory} 的输出路径
-     *                        （{@code projects/<id>/} 或 {@code temporary/}）。
+     * @param sessionRoot     SessionPaths#createProjectDirectory 的输出路径。
      * @param maxEntries      最大记录数。
      * @param maxEntryBytes   单条 request + response 字节上限（未压缩）。
-     * @param errorLogger     落盘失败时的日志回调（不允许 null；生产路径由
-     *                        {@code AuditAiExtension} 注入 {@code api.logging().logToError}）。
-     * @throws IOException 任何 IO 异常（创建目录、清理老数据）。
+     * @param errorLogger     落盘失败时的日志回调（不允许 null）。
+     * @throws IOException 任何 IO 异常。
      */
     public AnalysisHistoryStore(Path sessionRoot, int maxEntries, long maxEntryBytes,
                                 Consumer<String> errorLogger) throws IOException {
@@ -166,37 +139,23 @@ public final class AnalysisHistoryStore implements AutoCloseable {
                 com.auditai.burp.util.WorkflowLogger.AUDIT_TRAILS_DIRECTORY_NAME);
         Files.createDirectories(bodyDirectory);
         Files.createDirectories(auditTrailsDirectory);
-        // 一次性清理老 ProxyTrafficStore 数据（迁移期设计）：
-        // 检测到 <sessionRoot>/bodies/ 或 <sessionRoot>/index.json 存在就删掉，
-        // 失败仅写错误日志，不阻塞新 store 启动。
+        // 一次性清理老 ProxyTrafficStore 数据（迁移期设计）：失败仅写错误日志，不阻塞启动。
         purgeLegacyTrafficData(sessionRoot, this.errorLogger);
         loadIndex();
-        // 重启后必须按磁盘实际情况重建 totalBodyBytes：该字段只在"新建 body 文件"时累加，
-        // 不重建就会停在 0——DEFAULT_MAX_TOTAL_BYTES（磁盘上限）在重启后完全失效，
-        // 且后续 deleteUnreferencedBodies 的扣减会扣掉从未计入的字节（被 Math.max(0,..) 夹断），
-        // 计数只单向偏低。统计口径 = body 目录下所有文件，与 deleteUnreferencedBodies 的扣减口径一致。
+        // 重启后按磁盘实际情况重建 totalBodyBytes（该字段只在"新建 body 文件"时累加，
+        // 不重建会停在 0，DEFAULT_MAX_TOTAL_BYTES 在重启后失效）。
         recomputeTotalBodyBytes();
     }
 
     /**
      * 添加一条"分析完成"记录。
      *
-     * <p>流程：</p>
-     * <ol>
-     *   <li>按 {@link RiskLevel#derive} 推 risk；</li>
-     *   <li>对 request/response 字节按 {@link BodyStorage#prepareStoredMessage}
-     *       做有界内容保护（裁剪 JSON / 二进制占位符）；</li>
-     *   <li>写入 {@code history/bodies/}，按 SHA-256 去重；</li>
-     *   <li>构造 {@link AnalysisHistoryEntry}，加入内存索引；</li>
-     *   <li>防抖落盘 + 容量淘汰。</li>
-     * </ol>
-     *
-     * @param result         一次完整分析的结果（线程不变量，所有字段已确定）。
+     * @param result         一次完整分析的结果。
      * @param trigger        触发来源（手动 / 被动）。
      * @param requestBytes   原始请求字节；可为 null（不携带）。
      * @param responseBytes  原始响应字节；可为 null（无响应 / 不携带）。
      * @param auditTrailFile 审计轨迹 XML 绝对路径（位于 {@code <sessionRoot>/audit-trails/}）；
-     *                       可为 null（取消或被 sink 丢弃时）。该文件在入库前<b>必须已存在</b>——
+     *                       可为 null。该文件在入库前<b>必须已存在</b>——
      *                       落盘时机由 {@code AnalysisResultSink} 在调用本方法前完成。
      * @return 新分配的 entry id；调用方可用于关联。
      */
@@ -217,11 +176,10 @@ public final class AnalysisHistoryStore implements AutoCloseable {
             }
             id = nextId.getAndIncrement();
             RiskLevel risk = RiskLevel.derive(result);
-            // 1. 准备 request 字节（裁剪 + gzip 写盘）
+            // request 字节：按 BodyStorage.prepareStoredMessage 裁剪，超限再硬截
             byte[] safeReq = requestBytes == null ? new byte[0] : requestBytes.clone();
             boolean reqTruncated = false;
             if (safeReq.length > maxEntryBytes) {
-                // 单条总字节超限：先按 BodyStorage 裁剪策略走一次；若仍超限则在 add 末尾截断。
                 safeReq = BodyStorage.prepareStoredMessage(safeReq);
                 reqTruncated = true;
                 if (safeReq.length > maxEntryBytes) {
@@ -229,7 +187,7 @@ public final class AnalysisHistoryStore implements AutoCloseable {
                 }
             }
             BodyWrite reqWrite = writeBodyIfAbsent(safeReq, "req", id);
-            // 2. 准备 response 字节
+            // response 字节：同上
             byte[] safeResp = responseBytes == null ? new byte[0] : responseBytes.clone();
             boolean respTruncated = false;
             if (safeResp.length > maxEntryBytes) {
@@ -240,17 +198,15 @@ public final class AnalysisHistoryStore implements AutoCloseable {
                 }
             }
             BodyWrite respWrite = writeBodyIfAbsent(safeResp, "res", id);
-            // 3. 增量维护磁盘占用
+            // 增量维护磁盘占用
             if (reqWrite.created) {
                 totalBodyBytes += reqWrite.fileSize;
             }
             if (respWrite.created) {
                 totalBodyBytes += respWrite.fileSize;
             }
-            // 4. 构造 entry；request/response 字节本身不存内存（按需从磁盘读）
-            //    requestFingerprint 用【原始】requestBytes 算（保证与被动分析在线算的指纹严格一致），
-            //    不受 truncate / prepareStoredMessage 影响；requestBytes 为 null 时算 "method|url|nobody"，
-            //    启动预热 dedup 时也会得到同样的指纹，行为可预测。
+            // requestFingerprint 用【原始】requestBytes 算（与被动分析在线算的指纹严格一致），
+            // 不受 truncate / prepareStoredMessage 影响
             String requestFingerprint = RequestFingerprint.compute(
                     result.getMethod(), result.getUrl(), requestBytes);
             AnalysisHistoryEntry entry = new AnalysisHistoryEntry(
@@ -377,7 +333,7 @@ public final class AnalysisHistoryStore implements AutoCloseable {
      * 返回当前所有 entry，按时间升序（最旧在前、最新在底），与 Burp 原生
      * HTTP history 表格的"新条目滚到底部"行为一致。
      *
-     * <p>注：{@link #findByDomain} 内部仍按时间倒序——那是给"同域历史摘要"
+     * <p>注：#findByDomain 内部仍按时间倒序——那是给"同域历史摘要"
      * 用的（多报文协同分析），与表格展示无关。</p>
      */
     public List<AnalysisHistoryEntry> list() {
@@ -418,7 +374,7 @@ public final class AnalysisHistoryStore implements AutoCloseable {
     /**
      * 按 id 删除<b>单条</b>记录（"历史"页签右键删除入口）。
      *
-     * <p>与 {@link #clear()} 的差异：只删一条、不动其它记录。删除后对不再被任何
+     * <p>与 #clear() 的差异：只删一条、不动其它记录。删除后对不再被任何
      * entry 引用的 body 文件做一次清理——body 按 SHA-256 跨记录去重共享，某条
      * 记录独占的文件被释放，仍被其它记录引用的文件保留。随后防抖落盘 + 通知监听器。</p>
      *
@@ -491,7 +447,7 @@ public final class AnalysisHistoryStore implements AutoCloseable {
     }
 
     /**
-     * 返回 audit-trail 目录：与 {@link #sessionDirectory()} 同级，存放每次分析的
+     * 返回 audit-trail 目录：与 #sessionDirectory() 同级，存放每次分析的
      * agent ↔ AI 交互 XML。供 {@code AnalysisResultSink} 在入库前把 XML 落盘到此目录。
      */
     public Path auditTrailsDirectory() {
@@ -571,7 +527,7 @@ public final class AnalysisHistoryStore implements AutoCloseable {
         }
     }
 
-    /** 清空 audit-trails 目录下的所有 XML（供 {@link #clear} 使用）。 */
+    /** 清空 audit-trails 目录下的所有 XML（供 #clear 使用）。 */
     private void clearAuditTrailFiles() {
         if (!Files.isDirectory(auditTrailsDirectory)) {
             return;
@@ -626,7 +582,7 @@ public final class AnalysisHistoryStore implements AutoCloseable {
      *
      * <p><b>为什么磁盘上限单独一轮循环</b>：body 文件按 SHA-256 跨记录去重，一个文件可能被
      * 多条 entry 共享，因此"淘汰一条 entry"并不等于"释放了它名下那些字节"——只能先淘汰条目、
-     * 再物理删除不再被引用的文件、然后按磁盘实际占用重算 {@link #totalBodyBytes}。
+     * 再物理删除不再被引用的文件、然后按磁盘实际占用重算 #totalBodyBytes。
      * 历史实现把删条目和重算混在一个循环里且循环内不更新计数，导致一旦越过磁盘上限，
      * 循环会把<b>所有</b>历史全部淘汰（而不是"淘汰到低于上限为止"）。</p>
      */
@@ -664,10 +620,10 @@ public final class AnalysisHistoryStore implements AutoCloseable {
     }
 
     /**
-     * 按 body 目录里实际存在的文件大小重算 {@link #totalBodyBytes}。
+     * 按 body 目录里实际存在的文件大小重算 #totalBodyBytes。
      *
      * <p>统计口径包含孤儿文件（没有任何 entry 引用的历史遗留），因为该字段控制的是
-     * <b>磁盘占用</b>上限，而 {@link #deleteUnreferencedBodies()} 返回的正是孤儿文件的字节数
+     * <b>磁盘占用</b>上限，而 #deleteUnreferencedBodies() 返回的正是孤儿文件的字节数
      * ——两者口径一致才能保证"加/减"配对。</p>
      */
     private void recomputeTotalBodyBytes() {
@@ -718,7 +674,7 @@ public final class AnalysisHistoryStore implements AutoCloseable {
      * 写 body 字节到 {@code <bodyDirectory>/<hash>.<type>.gz}：已存在则复用，
      * 不存在则写临时文件 + 原子移动。
      *
-     * <p><b>线程安全约定：</b>由调用方在 {@link #lock} 内调用，与 {@code ProxyTrafficStore}
+     * <p><b>线程安全约定：</b>由调用方在 #lock 内调用，与 {@code ProxyTrafficStore}
      * 一致。</p>
      */
     private BodyWrite writeBodyIfAbsent(byte[] content, String type, long entryId) throws IOException {
@@ -821,7 +777,7 @@ public final class AnalysisHistoryStore implements AutoCloseable {
 
     /**
      * 索引落盘调度：每次 add 调用本方法排一个 500ms 后执行的一次性任务，
-     * 任务内部判 {@link #persistDirty} 决定是否真落盘。
+     * 任务内部判 #persistDirty 决定是否真落盘。
      *
      * <p>设计要点：</p>
      * <ul>
@@ -854,8 +810,8 @@ public final class AnalysisHistoryStore implements AutoCloseable {
     /**
      * 调度器线程上执行的实际落盘决策。
      *
-     * <p>注意：本方法不在 {@link #lock} 内被调用，是从调度器线程进入的；
-     * 但 {@link #flushPersistLocked} 内部会获取 {@link #lock}，与 {@code add} /
+     * <p>注意：本方法不在 #lock 内被调用，是从调度器线程进入的；
+     * 但 #flushPersistLocked 内部会获取 #lock，与 {@code add} /
      * {@code close} 等并发路径串行化。</p>
      */
     private void runScheduledFlush() {
@@ -879,7 +835,7 @@ public final class AnalysisHistoryStore implements AutoCloseable {
         }
     }
 
-    /** 把 index.json 真正写入磁盘。调用方必须持有 {@link #lock}。 */
+    /** 把 index.json 真正写入磁盘。调用方必须持有 #lock。 */
     private void flushPersistLocked(long now) throws IOException {
         JsonObject root = new JsonObject();
         JsonArray array = new JsonArray();
@@ -942,7 +898,7 @@ public final class AnalysisHistoryStore implements AutoCloseable {
         return stripped;
     }
 
-    /** {@link #writeBodyIfAbsent} 的返回结果。 */
+    /** #writeBodyIfAbsent 的返回结果。 */
     private static final class BodyWrite {
         final Path path;
         final boolean created;

@@ -24,20 +24,10 @@ import java.util.function.Consumer;
 /**
  * "问题列表"页签背后的全局问题库。
  *
- * <p>每次 {@link TrafficAnalyzer} 完成分析后，会把结构化 {@link Finding} 列表
- * 合并到本 store。{@link com.auditai.burp.ui.FindingsPanel} 通过
- * {@link #list()} 拿到按"安装时间升序"排好的列表渲染表格（最新条目滚到底部，
- * 与 {@link com.auditai.burp.history.AnalysisHistoryStore#list()} 保持一致），
- * 并通过 {@link #addListener(Consumer)} 订阅变更事件以实时刷新。</p>
- *
- * <p>每个 finding 通过 {@code analysisTimestamp} 关联到一次完整分析
- * （{@link AnalysisResult}），其完整报告、HTTP 方法、URL 缓存在
- * {@link AnalysisContext} 旁路表里，供下方"分析报告 / Request / Response"
- * 页签联动展示。</p>
- *
- * <p>持久化策略：参考 {@link com.auditai.burp.history.AnalysisHistoryStore} 的做法，把当前所有问题以
- * 紧凑 JSON 写到 findings-index.json；下次启动加载。FIFO 上限
- * （{@link #DEFAULT_MAX_FINDINGS}）避免长期使用后无限增长。</p>
+ * <p>每次分析完成的 Finding 合并进本 store，按时间升序对外暴露。
+ * 关联的完整报告 / HTTP 方法 / URL 缓存在 AnalysisContext 旁路表里。
+ * 持久化策略参考 com.auditai.burp.history.AnalysisHistoryStore：紧凑 JSON 写到
+ * {@code findings-index.json}，FIFO 上限 #DEFAULT_MAX_FINDINGS。</p>
  */
 public final class FindingStore implements AutoCloseable {
 
@@ -47,19 +37,13 @@ public final class FindingStore implements AutoCloseable {
     /**
      * 默认最大内存 context 数：避免 request/response 字节把内存吃爆。
      *
-     * <p>每次分析都会向 {@code contexts} map 加一条记录，附带 request/response
-     * 原文（典型 5-50KB，大报文场景可达 1-10MB）。没有上限的话持续点 Analyze
-     * 会无限增长导致 OOM。</p>
-     *
-     * <p>FIFO 淘汰最旧 context 时，<b>不会</b>连带删除对应 finding —— finding
-     * 仍按 {@link #DEFAULT_MAX_FINDINGS} 上限保留元数据 + summary。被淘汰的
-     * context 对应 finding 调 {@link #contextFor} 时会拿到"兜底 context"
-     * （用 finding 自身字段构造，无 request/response 字节），UI 自动回退到
-     * {@code AnalysisHistoryStore} 反查路径。</p>
+     * <p>context 被淘汰后，对应 finding 调 #contextFor 时回退为"兜底 context"
+     * （用 finding 自身字段构造，无 request/response 字节），UI 仍可经
+     * {@code AnalysisHistoryStore} 反查路径拿到原文。</p>
      */
     static final int DEFAULT_MAX_CONTEXTS = 200;
 
-    /** 数据目录名（与 AnalysisHistoryStore 平级；现统一从 {@link SessionPaths} 取）。 */
+    /** 数据目录名（与 AnalysisHistoryStore 平级；现统一从 SessionPaths 取）。 */
     // 常量 DATA_DIRECTORY_NAME / TEMPORARY_PROJECT_ID / PROJECTS_DIRECTORY_NAME
     // 已迁移到 SessionPaths，本类不再重复声明。
     private static final String INDEX_FILE_NAME = "findings-index.json";
@@ -69,20 +53,13 @@ public final class FindingStore implements AutoCloseable {
     private final int maxFindings;
     private final int maxContexts;
     /**
-     * finding 库：{@link LinkedHashMap} 天然按插入顺序迭代，FIFO 淘汰 + 稳定遍历
-     * 一并满足；单 map 替代原"LinkedHashSet + ConcurrentHashMap"双结构，
-     * 避免"加 finding 改两处"漏改导致顺序与内容撕裂。所有读写经 {@link #lock} 串行。
+     * finding 库：LinkedHashMap 天然按插入顺序迭代。所有读写经 #lock 串行。
      */
     private final LinkedHashMap<String, Finding> findings = new LinkedHashMap<>();
     /**
-     * 一次完整分析的上下文：key = {@link AnalysisResult#getTimestampMillis()}（同一次分析的 finding 共享）。
-     * "完整报告 / HTTP method / URL / 状态码 / 关联 requestId"只在这里存一份，避免每条 finding 重复。
-     *
-     * <p>附带 request/response 字节是潜在的内存炸弹（单次分析 1-10MB），由
-     * {@link #maxContexts} + {@link #evictContextsIfNeeded()} 控制上限。</p>
-     *
-     * <p>同样用 {@link LinkedHashMap} 保留插入顺序；同 ts 二次入库（"刷新"语义）
-     * 时 {@code remove + put} 把它移到末尾，避免 LRU 误淘汰。</p>
+     * 一次完整分析的上下文：key = AnalysisResult#getTimestampMillis()。
+     * 完整报告 / HTTP method / URL / 状态码 / 关联 requestId 在此共享。
+     * 同 ts 二次入库时 {@code remove + put} 把它移到末尾。
      */
     private final LinkedHashMap<Long, AnalysisContext> contexts = new LinkedHashMap<>();
     private final List<Consumer<Void>> listeners = new CopyOnWriteArrayList<>();
@@ -135,14 +112,14 @@ public final class FindingStore implements AutoCloseable {
      * <p>同一次分析内的多条 finding 分别独立入库（每条都有唯一 findingId）；
      * 重复添加（findingId 已存在）会被静默忽略——正常流程里 findingId 不会冲突。</p>
      *
-     * <p>同时把该次分析的 {@link AnalysisResult} 缓存到 {@link AnalysisContext}，
+     * <p>同时把该次分析的 AnalysisResult 缓存到 AnalysisContext，
      * 供下方详情页签读取"完整分析报告"和"关联 requestId"。</p>
      *
-     * <p><b>request / response 字节：</b>该方法不携带原文。{@link AnalysisContext} 里
+     * <p><b>request / response 字节：</b>该方法不携带原文。AnalysisContext 里
      * 这两个字段会是 null，UI 选中 finding 时会回退到 {@code AnalysisHistoryStore} 反查。
-     * 需要"原文直达"时调 {@link #addFindings(AnalysisResult, byte[], byte[])}。</p>
+     * 需要"原文直达"时调 #addFindings(AnalysisResult, byte[], byte[])。</p>
      *
-     * @param result 来自 {@link TrafficAnalyzer} 的分析结果。
+     * @param result 来自 TrafficAnalyzer 的分析结果。
      */
     public void addFindings(AnalysisResult result) {
         addFindings(result, null, null);
@@ -158,7 +135,7 @@ public final class FindingStore implements AutoCloseable {
      * <p>这一路径让"Repeater 主动发起的报文"等不在 Proxy 历史里的请求也能在下方
      * 报文页签完整展示。</p>
      *
-     * @param result        来自 {@link TrafficAnalyzer} 的分析结果。
+     * @param result        来自 TrafficAnalyzer 的分析结果。
      * @param requestBytes  分析时使用的原始请求字节；可为 null（不携带）。
      * @param responseBytes 分析时使用的原始响应字节；可为 null（无响应 / 不携带）。
      */
@@ -210,12 +187,12 @@ public final class FindingStore implements AutoCloseable {
 
     /**
      * 返回当前所有问题，按"安装时间升序"排序（最旧在前、最新在底），与
-     * {@link com.auditai.burp.history.AnalysisHistoryStore#list()} 的"新条目滚到底部"
+     * com.auditai.burp.history.AnalysisHistoryStore#list() 的"新条目滚到底部"
      * 行为保持一致，UI 表格直接按返回顺序填模型行即可。
      *
-     * <p>{@link List#sort(Comparator)} 是 stable sort：当多条 finding 的
-     * {@code capturedAtMillis} 相同时，退化为 {@link LinkedHashMap} 的插入顺序
-     * （即 {@link #addFindings} 的到达先后）。</p>
+     * <p>List#sort(Comparator) 是 stable sort：当多条 finding 的
+     * {@code capturedAtMillis} 相同时，退化为 LinkedHashMap 的插入顺序
+     * （即 #addFindings 的到达先后）。</p>
      */
     public List<Finding> list() {
         List<Finding> result;
@@ -229,7 +206,7 @@ public final class FindingStore implements AutoCloseable {
     }
 
     /**
-     * 默认排序：按 {@link Finding#getCapturedAtMillis()} 升序——最旧 finding 在列表顶部，
+     * 默认排序：按 Finding#getCapturedAtMillis() 升序——最旧 finding 在列表顶部，
      * 最新 finding 在列表底部，让"最新发现滚到底部"的视觉规律与"历史"页签一致。
      */
     static final Comparator<Finding> SORT_BY_CAPTURED_TIME_ASC =
@@ -264,10 +241,10 @@ public final class FindingStore implements AutoCloseable {
      * 删除单条问题。
      *
      * <p>按 {@code findingId} 精确删除（findingId 是 finding 的全局唯一 ID，由
-     * {@link Finding#create} / {@link Finding#placeholder(String, Severity, String, String, long, long)}
+     * Finding#create / Finding#placeholder(String, Severity, String, String, long, long)
      * 工厂方法随机生成）；
      * 删除后若该 finding 所属的 {@code analysisTimestamp} 没有任何其它 finding
-     * 引用，则把对应的 {@link AnalysisContext} 也一并清理掉（避免 context 表
+     * 引用，则把对应的 AnalysisContext 也一并清理掉（避免 context 表
      * 长期持有已被删除 finding 的 request/response 字节）。</p>
      *
      * <p>未找到指定 {@code findingId} 时静默忽略；调用方无需额外判空。
@@ -333,7 +310,7 @@ public final class FindingStore implements AutoCloseable {
      * 释放内存索引；磁盘文件保留，重启后自动恢复。
      *
      * <p>本 store 没有后台线程或文件句柄等需要显式清理的资源（内存索引随 GC 回收），
-     * close 仅用于满足 {@link AutoCloseable} 契约，无实际动作。</p>
+     * close 仅用于满足 AutoCloseable 契约，无实际动作。</p>
      */
     @Override
     public void close() {
@@ -344,8 +321,8 @@ public final class FindingStore implements AutoCloseable {
     }
 
     /**
-     * 注册更新监听器：每次 {@link #addFindings(AnalysisResult)} /
-     * {@link #clear()} 真正修改了库时同步触发。
+     * 注册更新监听器：每次 #addFindings(AnalysisResult) /
+     * #clear() 真正修改了库时同步触发。
      */
     public void addListener(Consumer<Void> listener) {
         if (listener != null) {
@@ -375,10 +352,10 @@ public final class FindingStore implements AutoCloseable {
     }
 
     /**
-     * 超过 {@link #maxContexts} 上限时按插入顺序淘汰最旧 context。
+     * 超过 #maxContexts 上限时按插入顺序淘汰最旧 context。
      *
-     * <p><b>不连带删除 finding</b> —— finding 仍按 {@link #evictIfNeeded} 控制的上限
-     * 保留元数据 + summary。被淘汰的 context 对应 finding 调 {@link #contextFor}
+     * <p><b>不连带删除 finding</b> —— finding 仍按 #evictIfNeeded 控制的上限
+     * 保留元数据 + summary。被淘汰的 context 对应 finding 调 #contextFor
      * 时会拿到"兜底 context"（用 finding 自身字段构造，无 request/response 字节），
      * UI 自动回退到 {@code AnalysisHistoryStore} 反查路径。</p>
      */
@@ -560,18 +537,18 @@ public final class FindingStore implements AutoCloseable {
         return obj;
     }
 
-    // createProjectDirectory / extensionDataRoot / fallbackDataRoot / safePathPart
+    // createProjectDirectory / fallbackDataRoot / safePathPart
     // 已迁移到 SessionPaths，本类不再重复实现。
 
     /**
-     * 一次完整分析（{@link AnalysisResult}）的上下文：仅存"按 finding 共享的"信息，
+     * 一次完整分析（AnalysisResult）的上下文：仅存"按 finding 共享的"信息，
      * 避免每条 finding 重复存同一份 summary。
      *
      * <p><b>request / response 字节：</b>仅内存持有，<b>不</b>进磁盘。原因：报文可能很大，
      * 且 HTTP history（AnalysisHistoryStore）已经按需持久化完整报文；问题库磁盘上
      * 只需要保留 finding 元数据 + summary，重启后让 UI 回退到 AnalysisHistoryStore
-     * 反查。重启后内存里的字节就丢失，{@link #getRequestBytes()} /
-     * {@link #getResponseBytes()} 会返回 null。</p>
+     * 反查。重启后内存里的字节就丢失，#getRequestBytes() /
+     * #getResponseBytes() 会返回 null。</p>
      */
     public static final class AnalysisContext {
         private final long timestampMillis;

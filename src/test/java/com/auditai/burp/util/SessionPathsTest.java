@@ -16,9 +16,10 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** {@link SessionPaths} 的路径解析单元测试（专业版分支用代理伪造 {@link MontoyaApi} 覆盖）。 */
+/** SessionPaths 的路径解析单元测试（专业版分支用代理伪造 MontoyaApi 覆盖）。 */
 class SessionPathsTest {
 
     // ---------- 项目标识解析（专业版 / 社区版分流） ----------
@@ -74,17 +75,17 @@ class SessionPathsTest {
 
     @Test
     void createProjectDirectoryTemporary(@TempDir Path tempDir) throws Exception {
-        Path jar = tempDir.resolve("plugin.jar");
-        Path dir = SessionPaths.createProjectDirectory(jar.toString(), SessionPaths.TEMPORARY_PROJECT_ID);
+        Path dir = SessionPaths.createProjectDirectoryAtRoot(
+                tempDir.resolve("AuditAI Data"), SessionPaths.TEMPORARY_PROJECT_ID);
         assertEquals("temporary", dir.getFileName().toString());
-        assertEquals("AuditAIData", dir.getParent().getFileName().toString());
+        assertEquals("AuditAI Data", dir.getParent().getFileName().toString());
         assertTrue(Files.isDirectory(dir));
     }
 
     @Test
     void createProjectDirectoryProjectsSanitizesId(@TempDir Path tempDir) throws Exception {
-        Path jar = tempDir.resolve("plugin.jar");
-        Path dir = SessionPaths.createProjectDirectory(jar.toString(), "a/b:c");
+        Path dir = SessionPaths.createProjectDirectoryAtRoot(
+                tempDir.resolve("AuditAI Data"), "a/b:c");
         assertEquals("a_b_c", dir.getFileName().toString());
         assertEquals("projects", dir.getParent().getFileName().toString());
         assertTrue(Files.isDirectory(dir));
@@ -92,8 +93,8 @@ class SessionPathsTest {
 
     @Test
     void createProjectDirectoryNullIdFallsBackToTemporary(@TempDir Path tempDir) throws Exception {
-        Path jar = tempDir.resolve("plugin.jar");
-        Path dir = SessionPaths.createProjectDirectory(jar.toString(), null);
+        Path dir = SessionPaths.createProjectDirectoryAtRoot(
+                tempDir.resolve("AuditAI Data"), null);
         assertEquals("temporary", dir.getFileName().toString());
     }
 
@@ -165,6 +166,46 @@ class SessionPathsTest {
         assertFalse(SessionPaths.isBurpArtifact("burp.jar"));
         assertFalse(SessionPaths.isBurpArtifact(""));
         assertFalse(SessionPaths.isBurpArtifact(null));
+    }
+
+    // ---------- 数据根解析（resolveEnvOverride / resolveBurpSiblingRoot） ----------
+
+    @Test
+    void resolveEnvOverrideUnsetReturnsNull() {
+        assertEquals(null, SessionPaths.resolveEnvOverride(null));
+        assertEquals(null, SessionPaths.resolveEnvOverride(""));
+        assertEquals(null, SessionPaths.resolveEnvOverride("   "));
+    }
+
+    @Test
+    void resolveEnvOverrideAppendsDataDirNameWhenLastSegmentDiffers() {
+        // 用户指向父目录（最常用）
+        Path root = SessionPaths.resolveEnvOverride("parent-dir");
+        assertEquals("AuditAI Data", root.getFileName().toString());
+        assertEquals("parent-dir", root.getParent().getFileName().toString());
+    }
+
+    @Test
+    void resolveEnvOverrideUsesAsIsWhenLastSegmentMatches() {
+        // 用户已经指到数据根目录本身（精细控制），不再追加一层
+        Path root = SessionPaths.resolveEnvOverride("AuditAI Data");
+        assertEquals("AuditAI Data", root.getFileName().toString());
+        assertNull(root.getParent());
+    }
+
+    @Test
+    void resolveEnvOverrideTrimsWhitespace() {
+        Path root = SessionPaths.resolveEnvOverride("  parent-dir  ");
+        assertEquals("AuditAI Data", root.getFileName().toString());
+        assertEquals("parent-dir", root.getParent().getFileName().toString());
+    }
+
+    @Test
+    void resolveEnvOverrideMatchesCaseInsensitively() {
+        // Windows 文件系统大小写不敏感：末段大小写不同也应命中，避免多套一层。
+        Path root = SessionPaths.resolveEnvOverride("parent-dir/AUDITAI DATA");
+        assertEquals("AUDITAI DATA", root.getFileName().toString());
+        assertEquals("parent-dir", root.getParent().getFileName().toString());
     }
 
     // ---------- 代理伪造 MontoyaApi ----------

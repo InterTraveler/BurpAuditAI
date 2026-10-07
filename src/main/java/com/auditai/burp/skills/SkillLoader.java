@@ -58,19 +58,11 @@ import java.util.stream.Stream;
  *
  * <p>本类同时支持两种来源、两种目录形态：</p>
  * <ul>
- *   <li><b>来源</b>：内置（{@link SkillSource#BUILTIN}，classpath:/skills/）/
- *       用户自定义（{@link SkillSource#USER}，<code>AuditAIData/.../custom-skills/</code>）；</li>
+ *   <li><b>来源</b>：内置（SkillSource#BUILTIN，classpath:/skills/）/
+ *       用户自定义（SkillSource#USER，<code><数据根>/.../custom-skills/</code>，数据根见 SessionPaths 类）；</li>
  *   <li><b>形态</b>：分层（{@code <root>/<category>/<id>/SKILL.md}，
  *       category ∈ {vuln, auxiliary}）/ 扁平（{@code <root>/<id>/SKILL.md}，
  *       用户自定义技能专用）。</li>
- * </ul>
- *
- * <p>典型调用：</p>
- * <ul>
- *   <li>内置：{@link #fromClasspath(String, ClassLoader, Consumer)}——扫描打包进插件 JAR
- *       的 <code>src/main/resources/skills/</code> 目录，分层形态；</li>
- *   <li>用户：{@link #fromUserDirectory(Path, Consumer)}——扫描
- *       <code>AuditAIData/&lt;project&gt;/custom-skills/</code>，扁平形态。</li>
  * </ul>
  *
  * <p><b>分层目录约定</b>（内置）：技能根目录下按用途分两类子目录——</p>
@@ -86,11 +78,8 @@ import java.util.stream.Stream;
  * <p><b>扁平目录约定</b>（用户）：<code>custom-skills/&lt;id&gt;/SKILL.md</code>，
  * 直接以目录名作为 id，不区分分类。</p>
  *
- * <p>解析失败（IO 错误、缺 {@code ---} 边界、缺 {@code name} 字段）的文件会被跳过，
- * 诊断信息统一走构造期注入的 {@code errorLogger}（生产路径为 Burp 的
- * {@code api.logging().logToError}）。同名 id 出现多次时：来源为 {@link SkillSource#USER}
- * 的实例覆盖 {@link SkillSource#BUILTIN}——用户导入意图明确，"我用我自己的"；同来源重复
- * 时只保留第一次扫描到的实例。</p>
+ * <p>解析失败（IO 错误、缺 {@code ---} 边界、缺 {@code name} 字段）的文件会被跳过。
+ * 同名 id 时 SkillSource#USER 覆盖 SkillSource#BUILTIN；同来源重复只保留第一次。</p>
  */
 public final class SkillLoader {
 
@@ -106,11 +95,7 @@ public final class SkillLoader {
 
     private final List<Root> roots;
 
-    /**
-     * 错误/诊断日志回调。生产路径由 {@code AuditAiExtension} 注入
-     * {@code api.logging().logToError}，让扫描失败等信息进 Burp 的 Extender Error
-     * 面板（与系统其它日志聚合）。
-     */
+    /** 错误/诊断日志回调（生产路径由 {@code AuditAiExtension} 注入 {@code api.logging().logToError}）。 */
     private final Consumer<String> errorLogger;
 
     private SkillLoader(List<Root> roots, Consumer<String> errorLogger) {
@@ -118,36 +103,22 @@ public final class SkillLoader {
         this.errorLogger = Objects.requireNonNull(errorLogger, "errorLogger");
     }
 
-    /**
-     * 创建一个 no-op 错误回调：仅用于纯测试场景（不需要诊断输出）。生产路径
-     * 应直接调 {@link #fromClasspath(String, ClassLoader, Consumer)} /
-     * {@link #fromDirectory(Path, Consumer)} 注入 {@code api.logging().logToError}。
-     */
+    /** no-op 错误回调：仅用于纯测试场景。 */
     private static Consumer<String> noopErrorLogger() {
         return msg -> { };
     }
 
-    /**
-     * 创建 classpath 来源的加载器（无错误日志输出，仅用于纯测试场景）。
-     *
-     * <p>生产路径请用
-     * {@link #fromClasspath(String, ClassLoader, Consumer)} 并显式注入日志回调。</p>
-     */
+    /** 创建 classpath 来源的加载器（仅测试用，无错误日志）。生产路径请用三参重载。 */
     public static SkillLoader fromClasspath(String directoryName, ClassLoader classLoader) {
         return fromClasspath(directoryName, classLoader, noopErrorLogger());
     }
 
     /**
-     * 创建 classpath 来源的加载器，注入自定义日志回调。
+     * 创建 classpath 来源的加载器。
      *
-     * <p>典型调用：{@code SkillLoader.fromClasspath("skills", getClass().getClassLoader(), msg -> api.logging().logToError(msg))}，
-     * 实际指向 <code>src/main/resources/skills/</code>，打包后位于 JAR 根的
-     * {@code /skills/} 路径下。</p>
-     *
-     * @param directoryName classpath 中的目录名（例如 {@code "skills"}，不能以 {@code /} 开头）。
-     * @param classLoader   用于查找资源的类加载器；为 null 时使用当前线程的上下文类加载器。
+     * @param directoryName classpath 中的目录名（如 {@code "skills"}，不能以 {@code /} 开头）。
+     * @param classLoader   用于查找资源的类加载器；null 时用当前线程的上下文类加载器。
      * @param errorLogger   错误/诊断日志回调（不允许 null）。
-     * @return 加载器实例。
      */
     public static SkillLoader fromClasspath(String directoryName, ClassLoader classLoader,
                                             Consumer<String> errorLogger) {
@@ -155,10 +126,7 @@ public final class SkillLoader {
         Objects.requireNonNull(errorLogger, "errorLogger");
         ClassLoader cl = classLoader != null ? classLoader : Thread.currentThread().getContextClassLoader();
         if (cl == null) {
-            // 极端环境（隔离类加载器 / 上下文类加载器未设置）下两个来源都是 null：
-            // 与其在下面 cl.getResources 上抛 NPE，不如给出可诊断的失败。
-            throw new IllegalStateException("无法确定用于扫描 classpath 的类加载器："
-                    + "传入的 classLoader 为 null，且线程上下文类加载器也为 null");
+            throw new IllegalStateException("无法确定用于扫描 classpath 的类加载器：传入与线程上下文都为 null");
         }
         List<Root> roots = new ArrayList<>();
         try {
@@ -172,11 +140,7 @@ public final class SkillLoader {
         return new SkillLoader(roots, errorLogger);
     }
 
-    /**
-     * 创建文件系统目录来源的加载器（无错误日志输出，仅用于纯测试场景）。
-     *
-     * <p>生产路径请用 {@link #fromDirectory(Path, Consumer)} 注入日志回调。</p>
-     */
+    /** 创建文件系统目录来源的加载器（仅测试用，无错误日志）。生产路径请用两参重载。 */
     public static SkillLoader fromDirectory(Path directory) {
         return fromDirectory(directory, noopErrorLogger());
     }
@@ -202,17 +166,8 @@ public final class SkillLoader {
     }
 
     /**
-     * 创建扁平形态的文件系统目录加载器，专用于扫描用户自定义技能目录。
-     *
-     * <p>与 {@link #fromDirectory(Path, Consumer)} 的区别：</p>
-     * <ul>
-     *   <li>来源标记为 {@link SkillSource#USER}，UI 据此允许"卸载"；</li>
-     *   <li>仅扫描传入目录本身一层（<code>custom-skills/&lt;id&gt;/SKILL.md</code>），
-     *       不下钻到 <code>vuln/</code> 或 <code>auxiliary/</code>——用户导入形态是扁平的。</li>
-     * </ul>
-     *
-     * <p>用户目录不存在（首次安装前）或不是目录时同样返回空列表，不抛错。
-     * 若用户目录创建失败，由调用方（{@link CustomSkillStore}）自行处理。</p>
+     * 创建扁平形态的文件系统目录加载器，专用于扫描用户自定义技能目录（来源标记为
+     * SkillSource#USER，只扫一层）。
      *
      * @param directory    本地目录路径；不存在或不是目录时返回空列表（不抛错）。
      * @param errorLogger  错误/诊断日志回调（不允许 null）。
@@ -232,24 +187,13 @@ public final class SkillLoader {
     }
 
     /**
-     * 创建 classpath + 用户目录的合并加载器：内置技能（classpath:/skills/，
-     * 分层形态）+ 用户技能（{@code userDirectory}/，扁平形态）。
-     *
-     * <p>合并扫描顺序：先内置再用户——同名 id 时用户版覆盖内置版。
-     * 任一来源为空 / 不存在时降级为单来源加载器，不抛错。</p>
-     *
-     * <p>典型调用：</p>
-     * <pre>{@code
-     * SkillLoader.fromClasspathAndUserDirectory(
-     *     "skills", getClass().getClassLoader(),
-     *     customSkillStore.rootDirectory(),
-     *     api.logging()::logToError);
-     * }</pre>
+     * 创建 classpath + 用户目录的合并加载器。先内置再用户——同名 id 时用户版覆盖内置版。
+     * 任一来源为空 / 不存在时降级为单来源，不抛错。
      *
      * @param directoryName  classpath 中的内置技能目录名（如 {@code "skills"}）。
-     * @param classLoader    用于查找 classpath 资源的类加载器；为 null 时使用上下文类加载器。
-     * @param userDirectory  用户自定义技能目录（<code>custom-skills/</code>），可为 null
-     *                       （首次安装 / 数据目录创建失败时）；不存在时降级为仅 classpath。
+     * @param classLoader    用于查找 classpath 资源的类加载器；null 时使用上下文类加载器。
+     * @param userDirectory  用户自定义技能目录（<code>custom-skills/</code>），可为 null；
+     *                       不存在时降级为仅 classpath。
      * @param errorLogger    错误/诊断日志回调（不允许 null）。
      */
     public static SkillLoader fromClasspathAndUserDirectory(String directoryName, ClassLoader classLoader,
@@ -257,10 +201,8 @@ public final class SkillLoader {
         SkillLoader classpathOnly = fromClasspath(directoryName, classLoader, errorLogger);
         List<Root> roots = new ArrayList<>(classpathOnly.roots);
         if (userDirectory != null) {
-            // 即使目录当前不存在（首次安装 / 用户从未导入过技能）也要注册 Root——
-            // 用户首次"添加技能"会让 CustomSkillStore.install 调用 Files.createDirectories
-            // 把目录建出来；若此时 reload() 还找不到这条 Root，就会一直扫不到用户技能。
-            // 收集阶段 collectFromFile 内部会再次 Files.isDirectory 检查，目录缺失时自然跳过。
+            // 即使目录当前不存在也注册 Root：用户首次"添加技能"会建目录，reload 时才跟得上。
+            // collectFromFile 内部再次 Files.isDirectory 检查，目录缺失时自然跳过。
             try {
                 roots.add(new Root(userDirectory.toUri().toURL(), SkillSource.USER, true));
             } catch (IOException e) {
@@ -276,17 +218,8 @@ public final class SkillLoader {
     }
 
     /**
-     * 扫描所有已注册来源，解析后按 {@code id}（即技能目录名）字典序排序。
-     *
-     * <p>排序键选择 {@code id} 而非 {@code name} 的原因：{@code name} 是面向最终用户的中文/混合文案，
-     * {@link String#compareTo} 按 Unicode 码点比较，中文会落到英文字母之后，顺序看起来"乱"；
-     * 目录名（{@code id}）天然是英文短名（如 {@code sql-injection}、{@code xss-detector}），
-     * 字典序排出来就是按英文字母的自然顺序，符合直觉，且后续想插入新技能时只需重命名目录即可调整位置。</p>
-     *
-     * <p>解析失败（IO 错误、缺 {@code ---} 边界、缺 {@code name} 字段）的文件会被跳过，
-     * 不影响其它技能加载。同名 ID 出现多次时：来源为 {@link SkillSource#USER} 的实例覆盖
-     * {@link SkillSource#BUILTIN}（用户导入意图明确）；同来源重复时只保留第一次扫描到的实例。
-     * 诊断信息统一走构造期注入的 {@code errorLogger}。</p>
+     * 扫描所有已注册来源，按 {@code id}（即技能目录名）字典序排序后返回。
+     * 解析失败的文件会被跳过；同名 id 处理规则见类级 Javadoc。
      *
      * @return 技能列表（可能为空，但永远非 null）。
      */
@@ -317,7 +250,7 @@ public final class SkillLoader {
         }
     }
 
-    /** 扫描本地目录中各技能子目录里的 {@link #SKILL_FILENAME}。 */
+    /** 扫描本地目录中各技能子目录里的 #SKILL_FILENAME。 */
     private void collectFromFile(Path directory, Root root, Map<String, Skill> sink,
                                   Map<String, SkillSource> sourceById) {
         if (!Files.isDirectory(directory)) {
@@ -435,7 +368,7 @@ public final class SkillLoader {
     /**
      * 读取并解析单个 {@code SKILL.md} 文件：目录名作 ID，正文按 YAML frontmatter +
      * Markdown body 解析。缺 {@code ---} 边界或缺 {@code name} 字段时跳过并写日志；
-     * 同 ID 冲突解决：{@link SkillSource#USER} 覆盖 {@link SkillSource#BUILTIN}；
+     * 同 ID 冲突解决：SkillSource#USER 覆盖 SkillSource#BUILTIN；
      * 同来源重复时只保留首次扫描到的。
      */
     private void parseInto(String id, SkillSource source, IOSupplier input, Map<String, Skill> sink,
@@ -477,7 +410,7 @@ public final class SkillLoader {
     }
 
     /**
-     * 把 {@link BufferedReader} 全部读成字符串。UTF-8 编码（{@link InputStreamReader}
+     * 把 BufferedReader 全部读成字符串。UTF-8 编码（InputStreamReader
      * 构造时已声明），无 BOM 处理——SKILL.md 不写 BOM。
      */
     private static String readAll(BufferedReader reader) throws IOException {
@@ -678,7 +611,7 @@ public final class SkillLoader {
         return result;
     }
 
-    /** 把 frontmatter 字段 + body 拼成 {@link Skill}；缺 name 时返回 null 让上层记日志。 */
+    /** 把 frontmatter 字段 + body 拼成 Skill；缺 name 时返回 null 让上层记日志。 */
     private static Skill assemble(String id, String body, Map<String, String> fields,
                                   SkillSource source) {
         String name = fields.get("name");
@@ -707,21 +640,21 @@ public final class SkillLoader {
         return n;
     }
 
-    /** lambda 友好版的 {@link java.io.InputStream} 供给器；规避把 throws IOException 写进函数式接口。 */
+    /** lambda 友好版的 java.io.InputStream 供给器；规避把 throws IOException 写进函数式接口。 */
     @FunctionalInterface
     private interface IOSupplier {
         InputStream open() throws IOException;
     }
 
     /**
-     * 把一份 SKILL.md 字符串解析成 {@link Skill}，仅用于"导入前的内容校验"。
+     * 把一份 SKILL.md 字符串解析成 Skill，仅用于"导入前的内容校验"。
      *
-     * <p>本方法暴露 {@link #parseSkillMd} 的核心解析能力——{@link CustomSkillStore}
+     * <p>本方法暴露 #parseSkillMd 的核心解析能力——CustomSkillStore
      * 在把用户选中的文件落盘前先调一次，确保内容本身可解析（避免写入后下次扫描报
-     * "无法解析 SKILL.md"）。返回的 {@link Skill} 仅用于判定合法性，不参与实际渲染。</p>
+     * "无法解析 SKILL.md"）。返回的 Skill 仅用于判定合法性，不参与实际渲染。</p>
      *
-     * <p>来源固定为 {@link SkillSource#USER}（导入路径默认就是用户技能）；
-     * 测试或内置路径请直接调 {@link #load()}。</p>
+     * <p>来源固定为 SkillSource#USER（导入路径默认就是用户技能）；
+     * 测试或内置路径请直接调 #load()。</p>
      *
      * @param id      技能 id（仅参与解析，不读文件）。
      * @param content SKILL.md 文本。
