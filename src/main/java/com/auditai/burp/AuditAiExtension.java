@@ -108,15 +108,26 @@ public final class AuditAiExtension implements BurpExtension {
         AnalysisHistoryStore historyStore = null;
         FindingStore findingStore = null;
         // 用户技能目录挂在 sessionRoot 下：与历史库 / 问题库同级，独立子目录。
-        Path sessionRoot = null;
         String projectId = SessionPaths.resolveProjectId(api);
         // 会话根目录只解析一次，历史库与问题库共用。
+        SessionPaths.DataRootResolution dataRootResolution;
         try {
-            sessionRoot = SessionPaths.createProjectDirectory(api.extension().filename(), projectId);
+            dataRootResolution = SessionPaths.createProjectDirectory(api.extension().filename(), projectId);
         } catch (IOException e) {
             api.logging().logToError("AuditAI 无法创建会话数据目录，'历史'与'问题'页签将显示空态。", e);
+            dataRootResolution = null;
         }
-        if (sessionRoot != null) {
+        Path sessionRoot = dataRootResolution == null ? null : dataRootResolution.path();
+        if (dataRootResolution != null) {
+            api.logging().logToOutput("AuditAI 数据根：" + sessionRoot
+                    + "（来源：" + describeDataRoot(dataRootResolution.source()) + "）");
+            if (dataRootResolution.source() == SessionPaths.DataRootSource.OS_FALLBACK) {
+                api.logging().logToOutput("AuditAI 提示：" + dataRootResolution.diagnostic()
+                        + "；可通过环境变量 " + SessionPaths.AUDITAI_HOME_ENV_VAR + " 重定向。");
+            }
+            if (Boolean.getBoolean("auditai.debug.prompt")) {
+                api.logging().logToOutput(SessionPaths.describeResolutionAttempt(api, api.extension().filename()));
+            }
             try {
                 final AnalysisHistoryStore createdHistoryStore = new AnalysisHistoryStore(sessionRoot,
                         AnalysisHistoryStore.DEFAULT_MAX_ENTRIES,
@@ -135,7 +146,7 @@ public final class AuditAiExtension implements BurpExtension {
                 final FindingStore createdFindingStore = new FindingStore(sessionRoot);
                 findingStore = createdFindingStore;
                 api.extension().registerUnloadingHandler(() -> closeFindingStore(createdFindingStore));
-                api.logging().logToOutput("AuditAI 问题库目录：" + findingStore.sessionDirectory());
+                api.logging().logToOutput("AuditAI 问题库目录：" + findingStore.findingsDirectory());
             } catch (IOException e) {
                 api.logging().logToError("AuditAI 无法创建问题存储，问题页签将显示空态。", e);
             }
@@ -323,6 +334,16 @@ public final class AuditAiExtension implements BurpExtension {
         if (store != null) {
             store.close();
         }
+    }
+
+    /** 数据根来源的中文短描述。 */
+    private static String describeDataRoot(SessionPaths.DataRootSource source) {
+        return switch (source) {
+            case AUDITAI_HOME -> SessionPaths.AUDITAI_HOME_ENV_VAR + " 环境变量";
+            case BURP_SIBLING -> "与 Burp 安装目录同级";
+            case OS_FALLBACK -> "系统标准目录（兜底）";
+            case DIRECT -> "调用方显式传入";
+        };
     }
 
     /** Montoya Preferences key:语言选择。 */

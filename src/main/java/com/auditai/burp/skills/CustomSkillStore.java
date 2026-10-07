@@ -27,8 +27,8 @@ public final class CustomSkillStore {
     private final java.util.function.Consumer<String> errorLogger;
 
     /**
-     * @param sessionRoot {@code SessionPaths.createProjectDirectory} 的输出路径
-     *                    （{@code projects/<id>/} 或 {@code temporary/}）。若为 null
+     * @param sessionRoot 会话根目录（{@code SessionPaths.createProjectDirectory(...).path()}
+     *                    的输出，{@code projects/<id>/} 或 {@code temporary/}）。若为 null
      *                    或不可写时，#install / #uninstall 会抛
      *                    IOException，调用方降级提示"无法写入用户数据目录"。
      * @param errorLogger 落盘失败时的日志回调；生产路径由

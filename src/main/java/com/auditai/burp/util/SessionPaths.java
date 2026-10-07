@@ -3,13 +3,17 @@ package com.auditai.burp.util;
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.core.BurpSuiteEdition;
 
+import java.io.File;
 import java.io.IOException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * 定位当前 Burp 项目的会话目录：专业版 {@code <数据根>/projects/<id>/}，
@@ -50,6 +54,29 @@ public final class SessionPaths {
             "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
             "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9");
 
+    /**
+     * 数据根解析结果：路径 + 来源 + 兜底诊断。{@code diagnostic} 仅在
+     * {@link DataRootSource#OS_FALLBACK} 时非空，携带回退原因（未推断到 / 无父目录 /
+     * 同级不可写）与回退目标；其余来源为 null。
+     */
+    public record DataRootResolution(Path path, DataRootSource source, String diagnostic) {
+    }
+
+    /**
+     * 数据根来源：{@link #AUDITAI_HOME} > {@link #BURP_SIBLING} > {@link #OS_FALLBACK}。
+     * {@link #DIRECT} 仅出现在测试或调用方显式传入根目录的场景。
+     */
+    public enum DataRootSource {
+        /** 调用方显式传入根目录（测试或内部代码使用）。 */
+        DIRECT,
+        /** {@link #AUDITAI_HOME_ENV_VAR} 环境变量指定。 */
+        AUDITAI_HOME,
+        /** 与 Burp 安装目录同级。 */
+        BURP_SIBLING,
+        /** 系统标准用户数据目录兜底（Burp 同级不可写等场景）。 */
+        OS_FALLBACK
+    }
+
     private SessionPaths() {
     }
 
@@ -62,22 +89,15 @@ public final class SessionPaths {
     }
 
     /**
-     * @param api Montoya API 门面。
-     * @return 当前 Burp 是否以磁盘项目（--project-file）启动。
-     */
-    public static boolean isDiskProject(MontoyaApi api) {
-        return api.burpSuite().commandLineArguments().stream()
-                .anyMatch(argument -> argument.equals("--project-file")
-                        || argument.startsWith("--project-file="));
-    }
-
-    /**
-     * 解析当前会话应使用的项目标识：专业版 + 磁盘项目 + 存在稳定项目 ID → 返回项目 ID
-     * （落到 {@code projects/<id>/}）；其余（社区版 / 企业版 / 专业版临时项目 / 项目 ID
-     * 为空）→ 返回 #TEMPORARY_PROJECT_ID（落到 {@code temporary/}）。
+     * 解析当前会话应使用的项目标识：专业版且项目 ID 非空 → 返回项目 ID
+     * （落到 {@code projects/<id>/}）；其余（社区版 / 企业版 / 专业版但 ID 为空）
+     * → 返回 #TEMPORARY_PROJECT_ID（落到 {@code temporary/}）。
+     *
+     * <p>专业版即使未带 {@code --project-file} 也会拿到稳定 ID，直接落到
+     * {@code projects/<id>/}，避免不同会话挤到同一个 {@code temporary/}。</p>
      */
     public static String resolveProjectId(MontoyaApi api) {
-        if (isProfessionalEdition(api) && isDiskProject(api)) {
+        if (isProfessionalEdition(api)) {
             String id = api.project().id();
             if (id != null && !id.isBlank()) {
                 return id;
@@ -87,43 +107,53 @@ public final class SessionPaths {
     }
 
     /**
-     * 取当前项目的会话根目录：{@code <数据根>/projects/<id>/}（专业版磁盘项目）或
-     * {@code <数据根>/temporary/}（社区版 / 临时项目）。
+     * 取当前项目的会话根目录：{@code <数据根>/projects/<id>/}（专业版）或
+     * {@code <数据根>/temporary/}（社区版 / 企业版 / 专业版无 id）。同时返回数据根来源与
+     * 诊断信息，便于 AuditAiExtension 在数据根落到兜底目录时提示用户原因。
      *
-     * @param extensionFilename 保留参数，当前未使用。
+     * @param extensionFilename 扩展 JAR 路径，用于 Burp 安装目录探测的兜底分支（native
+     *                          launcher 不暴露 {@code arguments()} 时仍能反推）。
      * @param projectId         #resolveProjectId(MontoyaApi) 的输出。
      * @throws IOException 数据根不可写。
      */
-    public static Path createProjectDirectory(String extensionFilename, String projectId) throws IOException {
-        return createProjectDirectoryAtRoot(null, projectId);
+    public static DataRootResolution createProjectDirectory(String extensionFilename, String projectId) throws IOException {
+        return createProjectDirectoryAtRoot(null, projectId, extensionFilename);
     }
 
     /**
      * 仅测试用：给定数据根直接创建会话目录，绕过 env / Burp 同级 / 兜底三级解析；
      * {@code dataRoot} 为 null 时等价于 #createProjectDirectory(String, String)。
      */
-    static Path createProjectDirectoryAtRoot(Path dataRoot, String projectId) throws IOException {
+    static DataRootResolution createProjectDirectoryAtRoot(Path dataRoot, String projectId, String extensionFilename) throws IOException {
         String safeProjectId = safePathPart(projectId == null || projectId.isBlank()
                 ? TEMPORARY_PROJECT_ID : projectId);
         if (dataRoot != null) {
-            return resolveProjectDirectory(dataRoot, safeProjectId);
+            return new DataRootResolution(resolveProjectDirectory(dataRoot, safeProjectId),
+                    DataRootSource.DIRECT, null);
         }
 
         Path envRoot = resolveEnvOverride();
         if (envRoot != null) {
-            return resolveProjectDirectory(envRoot, safeProjectId);
+            return new DataRootResolution(resolveProjectDirectory(envRoot, safeProjectId),
+                    DataRootSource.AUDITAI_HOME, null);
         }
 
-        Path burpSibling = resolveBurpSiblingRoot();
-        if (burpSibling != null) {
-            try {
-                return resolveProjectDirectory(burpSibling, safeProjectId);
-            } catch (IOException ignored) {
-                // 同级不可写 → 下一档。
+        Path burpHome = burpInstallationDirectory(extensionFilename);
+        if (burpHome != null) {
+            Path burpSibling = resolveBurpSiblingRoot(burpHome);
+            if (burpSibling != null) {
+                try {
+                    return new DataRootResolution(resolveProjectDirectory(burpSibling, safeProjectId),
+                            DataRootSource.BURP_SIBLING, null);
+                } catch (IOException ignored) {
+                    // 同级不可写 → 下一档。
+                }
             }
         }
 
-        return resolveProjectDirectory(fallbackDataRoot(), safeProjectId);
+        Path fallback = fallbackDataRoot();
+        return new DataRootResolution(resolveProjectDirectory(fallback, safeProjectId),
+                DataRootSource.OS_FALLBACK, fallbackDiagnostic(burpHome, fallback));
     }
 
     /** 把 {@code <数据根>[/projects/<id> | /temporary]} 这条路径真实创建出来。 */
@@ -157,43 +187,147 @@ public final class SessionPaths {
     }
 
     /**
-     * Burp 安装目录的"父级"（即与 Burp 同级）作为数据根。Burp 安装目录无法推断时返回 null。
+     * 由 Burp 安装目录推导同级数据根：{@code <burpHome 的父目录>/AuditAI Data}。
+     * {@code burpHome} 为 null 或没有父目录（Burp 装在文件系统根目录）时返回 null。
      */
-    static Path resolveBurpSiblingRoot() {
-        Path burpHome = burpInstallationDirectory();
+    static Path resolveBurpSiblingRoot(Path burpHome) {
         if (burpHome == null) {
             return null;
         }
         Path parent = burpHome.getParent();
-        if (parent == null) {
-            return null;
+        return parent == null ? null : parent.resolve(DATA_DIRECTORY_NAME);
+    }
+
+    /** OS 兜底时的诊断文案：区分"未推断到 / 无父目录 / 同级不可写"三种原因。 */
+    private static String fallbackDiagnostic(Path burpHome, Path fallback) {
+        if (burpHome == null) {
+            return "未推断到 Burp 安装目录，回退到 " + fallback;
         }
-        return parent.resolve(DATA_DIRECTORY_NAME);
+        if (burpHome.getParent() == null) {
+            return "Burp 安装目录 " + burpHome + " 无上级目录，回退到 " + fallback;
+        }
+        return "Burp 安装目录 " + burpHome + " 的同级不可写，回退到 " + fallback;
     }
 
     /**
      * 推断当前 JVM 进程对应的 Burp 安装根目录。
      *
-     * <p>Montoya 没有直接暴露 Burp 安装目录。本方法用 ProcessHandle 拿当前
-     * 进程命令行起点（{@code java} / {@code javaw} / {@code BurpSuitePro.exe} 等），
-     * 先判断起点本身是否为 Burp 启动器（原生启动器内嵌 JVM 的场景），再向上回溯找
-     * Burp 的启动器 / JAR。识别名单见 #BURP_ARTIFACT_NAMES。</p>
+     * <p>Montoya 没有直接暴露 Burp 安装目录。本方法按以下顺序探测：</p>
+     * <ol>
+     *   <li>进程命令行起点本身就是 Burp 启动器（{@code BurpSuitePro.exe} 等）；</li>
+     *   <li>独立 JVM 场景下沿父目录回溯找 Burp 启动器 / JAR；</li>
+     *   <li>JVM 参数里 {@code -jar burpsuite_*.jar}（用户用自定义 JDK 的
+     *       {@code java -jar} 启动 Burp 时走这条——{@code arguments()} 是唯一线索）；</li>
+     *   <li>{@code java.class.path} 系统属性（native launcher 清空了 {@code arguments()}
+     *       时仍保留主类 jar 路径）；</li>
+     *   <li>扩展 JAR 路径向上回溯 / 扫 {@code BurpSuite*} 同级目录（扩展和 Burp
+     *       不在同一棵目录树时兜底）。</li>
+     * </ol>
      *
-     * @return Burp 安装目录的绝对路径；推断不到（极端环境：进程命令行异常、文件布局
-     *         非标准）时返回 null。
+     * <p>识别名单见 #BURP_ARTIFACT_NAMES。</p>
+     *
+     * @param extensionFilename Burp 报告的扩展 JAR 路径；null / 空时跳过第 5 档。
+     * @return Burp 安装目录的绝对路径；推断不到时返回 null。
      */
-    private static Path burpInstallationDirectory() {
-        java.util.Optional<String> command = ProcessHandle.current().info().command();
-        if (command.isEmpty()) {
+    static Path burpInstallationDirectory(String extensionFilename) {
+        try {
+            return detectBurpInstallationDirectory(extensionFilename);
+        } catch (RuntimeException e) {
+            // ProcessHandle 的 command()/arguments() 在部分平台 / 启动器下会抛
+            // UnsupportedOperationException / SecurityException，平台返回的路径也可能非法
+            // （InvalidPathException）。探测失败统一按"推断不到"降级为 null，由上层回退到
+            // OS 标准目录，不能让 init 期异常一路抛到插件加载入口。
             return null;
         }
-        Path executable = Paths.get(command.get()).toAbsolutePath().normalize();
-        // 起点本身可能就是 Burp 启动器（原生启动器内嵌 JVM）。
-        if (isBurpArtifact(executable.getFileName().toString())) {
-            return executable.getParent();
+    }
+
+    private static Path detectBurpInstallationDirectory(String extensionFilename) {
+        Optional<String> command = ProcessHandle.current().info().command();
+        if (command.isPresent()) {
+            Path executable = Paths.get(command.get()).toAbsolutePath().normalize();
+            // 起点本身就是 Burp 启动器（原生启动器内嵌 JVM）。
+            if (isBurpArtifact(executable.getFileName().toString())) {
+                return executable.getParent();
+            }
+            // 独立 JVM 场景：起点是 jre\bin\java.exe / javaw.exe，向上回溯找 Burp 安装目录。
+            Path current = executable.getParent();
+            while (current != null) {
+                for (String name : BURP_ARTIFACT_NAMES) {
+                    if (Files.isRegularFile(current.resolve(name))) {
+                        return current;
+                    }
+                }
+                current = current.getParent();
+            }
         }
-        // 独立 JVM 场景：起点是 jre\bin\java.exe / javaw.exe，向上回溯找 Burp 安装目录。
-        Path current = executable.getParent();
+        Path fromArgs = burpJarFromJvmArguments();
+        if (fromArgs != null) {
+            return fromArgs;
+        }
+        Path fromClassPath = burpJarFromJavaClassPath();
+        if (fromClassPath != null) {
+            return fromClassPath;
+        }
+        return burpDirFromExtensionFilename(extensionFilename);
+    }
+
+    /**
+     * 从 JVM 启动参数里找 {@code -jar burpsuite_*.jar}，返回 jar 所在目录。
+     * 仅识别 {@code -jar} 后紧跟的 Burp 制品文件名，避免误把其它 -jar 启动当成 Burp。
+     */
+    private static Path burpJarFromJvmArguments() {
+        Optional<String[]> arguments = ProcessHandle.current().info().arguments();
+        if (arguments.isEmpty()) {
+            return null;
+        }
+        String[] args = arguments.get();
+        for (int i = 0; i < args.length - 1; i++) {
+            if ("-jar".equals(args[i])) {
+                String jarPath = args[i + 1];
+                Path jar = Paths.get(jarPath).toAbsolutePath().normalize();
+                if (isBurpArtifact(jar.getFileName().toString())) {
+                    return jar.getParent();
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 从 {@code java.class.path} 系统属性里找 {@code burpsuite_*.jar}，返回 jar 所在目录。
+     * 覆盖 {@code ProcessHandle.arguments()} 被 native launcher 清空、却还能从 classpath
+     * 拿到主类 jar 的极端场景。
+     */
+    private static Path burpJarFromJavaClassPath() {
+        String classPath = System.getProperty("java.class.path");
+        if (classPath == null || classPath.isEmpty()) {
+            return null;
+        }
+        String separator = Pattern.quote(File.pathSeparator);
+        for (String entry : classPath.split(separator)) {
+            if (entry.isEmpty()) {
+                continue;
+            }
+            Path jar = Paths.get(entry).toAbsolutePath().normalize();
+            if (isBurpArtifact(jar.getFileName().toString())) {
+                return jar.getParent();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 从扩展 JAR 路径（{@code api.extension().filename()}）找 Burp 安装目录：先沿父目录
+     * 向上回溯；找不到时再从每层父目录的 {@code BurpSuite*} 同级目录里找——扩展 JAR 跟 Burp
+     * 装在并列的兄弟目录下时必须看同级。仍找不到时返回 null，由上层兜底到 LOCALAPPDATA。
+     */
+    private static Path burpDirFromExtensionFilename(String extensionFilename) {
+        if (extensionFilename == null || extensionFilename.isBlank()) {
+            return null;
+        }
+        Path jar = Paths.get(extensionFilename).toAbsolutePath().normalize();
+        // 1) 向上回溯。
+        Path current = jar.getParent();
         while (current != null) {
             for (String name : BURP_ARTIFACT_NAMES) {
                 if (Files.isRegularFile(current.resolve(name))) {
@@ -201,6 +335,33 @@ public final class SessionPaths {
                 }
             }
             current = current.getParent();
+        }
+        // 2) 每层父目录下扫 "BurpSuite*" 同级目录里的 Burp 产物。
+        Path anchor = jar.getParent();
+        while (anchor != null) {
+            Path parent = anchor.getParent();
+            if (parent == null) {
+                break;
+            }
+            try (DirectoryStream<Path> stream = Files.newDirectoryStream(parent)) {
+                for (Path sibling : stream) {
+                    if (!Files.isDirectory(sibling)) {
+                        continue;
+                    }
+                    String name = sibling.getFileName().toString();
+                    if (!name.toLowerCase(Locale.ROOT).startsWith("burpsuite")) {
+                        continue;
+                    }
+                    for (String artifact : BURP_ARTIFACT_NAMES) {
+                        if (Files.isRegularFile(sibling.resolve(artifact))) {
+                            return sibling;
+                        }
+                    }
+                }
+            } catch (IOException ignored) {
+                // 父目录不可读 / 受 ACL 限制 → 这一层扫不到，继续上一层。
+            }
+            anchor = parent;
         }
         return null;
     }
@@ -273,5 +434,39 @@ public final class SessionPaths {
             cut--;
         }
         return s.substring(0, cut);
+    }
+
+    /**
+     * DEBUG-only：把数据根解析的关键环境值摊到 Output，便于排查"为什么没落在 Burp 同级"。
+     * 仅在 {@code -Dauditai.debug.prompt=true} 时调用；不修改磁盘，只读进程 / 平台属性。
+     */
+    public static String describeResolutionAttempt(MontoyaApi api, String extensionFilename) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("[DEBUG] 数据根解析追踪：").append(System.lineSeparator());
+
+        sb.append("  [1] Burp 环境：");
+        if (api == null) {
+            sb.append("(api 未注入)");
+        } else {
+            sb.append("版本=").append(api.burpSuite().version().edition())
+                    .append("；项目名=").append(api.project().name())
+                    .append("；项目ID=").append(api.project().id())
+                    .append("；CLI 参数=").append(api.burpSuite().commandLineArguments())
+                    .append("；扩展 JAR=").append(extensionFilename);
+        }
+        sb.append(System.lineSeparator());
+
+        sb.append("  [2] 进程起点 (ProcessHandle.command())：");
+        Optional<String> cmd = ProcessHandle.current().info().command();
+        if (cmd.isEmpty()) {
+            sb.append("(未提供)");
+        } else {
+            Path exe = Paths.get(cmd.get()).toAbsolutePath().normalize();
+            String fileName = exe.getFileName() == null ? null : exe.getFileName().toString();
+            sb.append(exe).append(System.lineSeparator());
+            sb.append("      fileName=").append(fileName)
+                    .append("，isBurpArtifact=").append(isBurpArtifact(fileName));
+        }
+        return sb.toString();
     }
 }

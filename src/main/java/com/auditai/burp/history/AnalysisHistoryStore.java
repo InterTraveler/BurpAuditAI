@@ -16,10 +16,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
-import java.util.Objects;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -114,7 +116,7 @@ public final class AnalysisHistoryStore implements AutoCloseable {
      * 构造器：建 {@code <sessionRoot>/history/} 数据目录 + 一次性清理老
      * {@code ProxyTrafficStore} 留下的 {@code bodies/} + {@code index.json}（迁移期设计）。
      *
-     * @param sessionRoot     SessionPaths#createProjectDirectory 的输出路径。
+     * @param sessionRoot     会话根目录（{@code SessionPaths#createProjectDirectory(...).path()} 的输出）。
      * @param maxEntries      最大记录数。
      * @param maxEntryBytes   单条 request + response 字节上限（未压缩）。
      * @param errorLogger     落盘失败时的日志回调（不允许 null）。
@@ -588,11 +590,15 @@ public final class AnalysisHistoryStore implements AutoCloseable {
      */
     private void evictIfNeeded() throws IOException {
         // 第一轮：先满足"条数"上限（与历史行为一致，纯内存操作）。
+        boolean evictedByCount = false;
         while (entries.size() > maxEntries && evictOldest()) {
-            // 条件内完成淘汰
+            evictedByCount = true;
         }
-        // 第二轮：先释放未引用 body，再按磁盘实际占用判断是否需要继续淘汰。
-        totalBodyBytes = Math.max(0L, totalBodyBytes - deleteUnreferencedBodies());
+        // 第二轮：只有真淘汰过条目，才可能有 body 文件失去唯一引用需要释放；
+        // 未淘汰则跳过全目录扫描，避免每次 add 都做一次 body 目录遍历。
+        if (evictedByCount) {
+            totalBodyBytes = Math.max(0L, totalBodyBytes - deleteUnreferencedBodies());
+        }
         while (totalBodyBytes > DEFAULT_MAX_TOTAL_BYTES && evictOldest()) {
             totalBodyBytes = Math.max(0L, totalBodyBytes - deleteUnreferencedBodies());
         }
@@ -649,7 +655,7 @@ public final class AnalysisHistoryStore implements AutoCloseable {
 
     /** 删除不再被任何 entry 引用的 body 文件，返回释放的字节数。 */
     private long deleteUnreferencedBodies() throws IOException {
-        List<Path> referenced = new ArrayList<>();
+        Set<Path> referenced = new HashSet<>();
         for (AnalysisHistoryEntry entry : entries.values()) {
             if (entry.getRequestFile() != null) {
                 referenced.add(entry.getRequestFile());

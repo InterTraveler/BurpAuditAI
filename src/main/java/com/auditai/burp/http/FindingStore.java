@@ -1,6 +1,5 @@
 package com.auditai.burp.http;
 
-import com.auditai.burp.util.SessionPaths;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
@@ -27,7 +26,7 @@ import java.util.function.Consumer;
  * <p>每次分析完成的 Finding 合并进本 store，按时间升序对外暴露。
  * 关联的完整报告 / HTTP 方法 / URL 缓存在 AnalysisContext 旁路表里。
  * 持久化策略参考 com.auditai.burp.history.AnalysisHistoryStore：紧凑 JSON 写到
- * {@code findings-index.json}，FIFO 上限 #DEFAULT_MAX_FINDINGS。</p>
+ * {@code <sessionRoot>/findings/findings-index.json}，FIFO 上限 #DEFAULT_MAX_FINDINGS。</p>
  */
 public final class FindingStore implements AutoCloseable {
 
@@ -43,12 +42,12 @@ public final class FindingStore implements AutoCloseable {
      */
     static final int DEFAULT_MAX_CONTEXTS = 200;
 
-    /** 数据目录名（与 AnalysisHistoryStore 平级；现统一从 SessionPaths 取）。 */
-    // 常量 DATA_DIRECTORY_NAME / TEMPORARY_PROJECT_ID / PROJECTS_DIRECTORY_NAME
-    // 已迁移到 SessionPaths，本类不再重复声明。
+    /** 数据目录名（与 AnalysisHistoryStore 的 {@code history/} 同级；最终路径 = {@code <sessionRoot>/findings}）。 */
+    public static final String FINDINGS_DIRECTORY_NAME = "findings";
+
     private static final String INDEX_FILE_NAME = "findings-index.json";
 
-    private final Path sessionDirectory;
+    private final Path findingsDirectory;
     private final Path indexFile;
     private final int maxFindings;
     private final int maxContexts;
@@ -67,42 +66,32 @@ public final class FindingStore implements AutoCloseable {
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
     /**
-     * @param extensionFilename Burp 返回的插件 JAR 路径。
-     * @param projectId         Burp 启动时传入的 project ID；temporary 时所有数据集中存放。
-     * @throws IOException 无法创建存储目录时抛出。
-     */
-    public FindingStore(String extensionFilename, String projectId) throws IOException {
-        // 路径解析统一走 SessionPaths，避免与 AnalysisHistoryStore 分叉。
-        this(SessionPaths.createProjectDirectory(extensionFilename, projectId),
-                DEFAULT_MAX_FINDINGS, DEFAULT_MAX_CONTEXTS);
-    }
-
-    /**
      * 用已解析好的会话根目录构建问题库。
      *
-     * @param sessionDirectory {@code SessionPaths.createProjectDirectory} 的输出路径。
+     * @param sessionRoot 会话根目录（{@code SessionPaths.createProjectDirectory(...).path()} 的输出）；
+     *                    findings 索引落在 {@code <sessionRoot>/findings/findings-index.json}。
      * @throws IOException 无法创建存储目录时抛出。
      */
-    public FindingStore(Path sessionDirectory) throws IOException {
-        this(sessionDirectory, DEFAULT_MAX_FINDINGS, DEFAULT_MAX_CONTEXTS);
+    public FindingStore(Path sessionRoot) throws IOException {
+        this(sessionRoot, DEFAULT_MAX_FINDINGS, DEFAULT_MAX_CONTEXTS);
     }
 
     /**
      * 包级构造：测试可调，仅控制 findings 上限（contexts 用默认值）。
      */
-    FindingStore(Path sessionDirectory, int maxFindings) throws IOException {
-        this(sessionDirectory, maxFindings, DEFAULT_MAX_CONTEXTS);
+    FindingStore(Path sessionRoot, int maxFindings) throws IOException {
+        this(sessionRoot, maxFindings, DEFAULT_MAX_CONTEXTS);
     }
 
     /**
      * 包级构造：测试可调，单独控制 findings / contexts 上限。
      */
-    FindingStore(Path sessionDirectory, int maxFindings, int maxContexts) throws IOException {
-        this.sessionDirectory = sessionDirectory;
-        this.indexFile = sessionDirectory.resolve(INDEX_FILE_NAME);
+    FindingStore(Path sessionRoot, int maxFindings, int maxContexts) throws IOException {
+        this.findingsDirectory = sessionRoot.resolve(FINDINGS_DIRECTORY_NAME);
+        this.indexFile = findingsDirectory.resolve(INDEX_FILE_NAME);
         this.maxFindings = maxFindings;
         this.maxContexts = maxContexts;
-        Files.createDirectories(sessionDirectory);
+        Files.createDirectories(findingsDirectory);
         loadIndex();
     }
 
@@ -300,10 +289,10 @@ public final class FindingStore implements AutoCloseable {
     }
 
     /**
-     * 返回当前会话的存储目录（用于诊断 / 日志）。
+     * 返回问题库目录 {@code <sessionRoot>/findings}（用于诊断 / 日志）。
      */
-    public Path sessionDirectory() {
-        return sessionDirectory;
+    public Path findingsDirectory() {
+        return findingsDirectory;
     }
 
     /**
@@ -495,7 +484,7 @@ public final class FindingStore implements AutoCloseable {
         root.add("findings", arr);
         root.add("contexts", ctxs);
         try {
-            Path tmp = Files.createTempFile(sessionDirectory, "findings-index", ".tmp");
+            Path tmp = Files.createTempFile(findingsDirectory, "findings-index", ".tmp");
             try {
                 Files.writeString(tmp, gson.toJson(root), StandardCharsets.UTF_8);
                 try {
@@ -536,9 +525,6 @@ public final class FindingStore implements AutoCloseable {
         obj.addProperty("summary", ctx.summary == null ? "" : ctx.summary);
         return obj;
     }
-
-    // createProjectDirectory / fallbackDataRoot / safePathPart
-    // 已迁移到 SessionPaths，本类不再重复实现。
 
     /**
      * 一次完整分析（AnalysisResult）的上下文：仅存"按 finding 共享的"信息，

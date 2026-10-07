@@ -31,15 +31,16 @@ class SessionPathsTest {
     }
 
     @Test
-    void resolveProjectIdProfessionalTemporaryProjectFallsBackToTemporary() {
-        // 专业版未带 --project-file（临时项目）→ temporary
+    void resolveProjectIdProfessionalWithoutProjectFileUsesId() {
+        // 专业版即使不挂 --project-file，Burp 也会分配稳定 ID——直接落到 projects/<id>/，
+        // 避免不同会话挤到同一个 temporary/。
         MontoyaApi api = fakeApi(BurpSuiteEdition.PROFESSIONAL, List.of(), "proj-123");
-        assertEquals(SessionPaths.TEMPORARY_PROJECT_ID, SessionPaths.resolveProjectId(api));
+        assertEquals("proj-123", SessionPaths.resolveProjectId(api));
     }
 
     @Test
     void resolveProjectIdProfessionalBlankIdFallsBackToTemporary() {
-        // 磁盘项目但 id 为空 → temporary
+        // 专业版但项目 id 为空（极少数场景）→ temporary
         MontoyaApi api = fakeApi(BurpSuiteEdition.PROFESSIONAL, List.of("--project-file=x.burp"), "");
         assertEquals(SessionPaths.TEMPORARY_PROJECT_ID, SessionPaths.resolveProjectId(api));
     }
@@ -64,38 +65,37 @@ class SessionPathsTest {
         assertFalse(SessionPaths.isProfessionalEdition(fakeApi(BurpSuiteEdition.ENTERPRISE_EDITION, List.of(), null)));
     }
 
-    @Test
-    void isDiskProjectMatchesFlagForms() {
-        assertTrue(SessionPaths.isDiskProject(fakeApi(BurpSuiteEdition.PROFESSIONAL, List.of("--project-file"), null)));
-        assertTrue(SessionPaths.isDiskProject(fakeApi(BurpSuiteEdition.PROFESSIONAL, List.of("--project-file=a.burp"), null)));
-        assertFalse(SessionPaths.isDiskProject(fakeApi(BurpSuiteEdition.PROFESSIONAL, List.of("--config-file=a.json"), null)));
-    }
-
     // ---------- 目录解析（createProjectDirectory） ----------
 
     @Test
     void createProjectDirectoryTemporary(@TempDir Path tempDir) throws Exception {
-        Path dir = SessionPaths.createProjectDirectoryAtRoot(
-                tempDir.resolve("AuditAI Data"), SessionPaths.TEMPORARY_PROJECT_ID);
+        SessionPaths.DataRootResolution resolution = SessionPaths.createProjectDirectoryAtRoot(
+                tempDir.resolve("AuditAI Data"), SessionPaths.TEMPORARY_PROJECT_ID, null);
+        Path dir = resolution.path();
         assertEquals("temporary", dir.getFileName().toString());
         assertEquals("AuditAI Data", dir.getParent().getFileName().toString());
         assertTrue(Files.isDirectory(dir));
+        // 测试 / 调用方显式传入根目录 → 来源 = DIRECT。
+        assertEquals(SessionPaths.DataRootSource.DIRECT, resolution.source());
     }
 
     @Test
     void createProjectDirectoryProjectsSanitizesId(@TempDir Path tempDir) throws Exception {
-        Path dir = SessionPaths.createProjectDirectoryAtRoot(
-                tempDir.resolve("AuditAI Data"), "a/b:c");
+        SessionPaths.DataRootResolution resolution = SessionPaths.createProjectDirectoryAtRoot(
+                tempDir.resolve("AuditAI Data"), "a/b:c", null);
+        Path dir = resolution.path();
         assertEquals("a_b_c", dir.getFileName().toString());
         assertEquals("projects", dir.getParent().getFileName().toString());
         assertTrue(Files.isDirectory(dir));
+        assertEquals(SessionPaths.DataRootSource.DIRECT, resolution.source());
     }
 
     @Test
     void createProjectDirectoryNullIdFallsBackToTemporary(@TempDir Path tempDir) throws Exception {
-        Path dir = SessionPaths.createProjectDirectoryAtRoot(
-                tempDir.resolve("AuditAI Data"), null);
-        assertEquals("temporary", dir.getFileName().toString());
+        SessionPaths.DataRootResolution resolution = SessionPaths.createProjectDirectoryAtRoot(
+                tempDir.resolve("AuditAI Data"), null, null);
+        assertEquals("temporary", resolution.path().getFileName().toString());
+        assertEquals(SessionPaths.DataRootSource.DIRECT, resolution.source());
     }
 
     // ---------- 路径段清洗（safePathPart） ----------
