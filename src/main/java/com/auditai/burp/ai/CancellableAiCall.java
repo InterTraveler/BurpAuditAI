@@ -1,6 +1,5 @@
 package com.auditai.burp.ai;
 
-import java.net.http.HttpResponse;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -12,31 +11,31 @@ import java.util.function.Function;
  * <p>由 {@link AiClient#completeAsync} 返回，支持两种用法：</p>
  * <ul>
  *   <li>{@link #await()}：阻塞等待调用完成并返回模型文本（失败抛 {@link AiException}）；</li>
- *   <li>{@link #cancel()}：从任意线程中断进行中的 HTTP 请求（底层为
+ *   <li>{@link #cancel()}：从任意线程中断进行中的请求（底层为
  *       {@link CompletableFuture#cancel(boolean)}）；调用后 {@link #await()} 会以
- *       “分析已取消”的 {@link AiException} 结束。</li>
+ *       "分析已取消"的 {@link AiException} 结束。</li>
  * </ul>
  *
- * <p>线程安全性：本类内部状态由 {@link CompletableFuture} 保证，可被多线程并发访问。
- * {@link #await()} 是<b>幂等</b>的——响应映射（{@code responseMapper}）只在第一次
- * await 时执行一次，成功/失败结果被缓存，后续 await 直接返回缓存，避免降级重试等
- * 带副作用的 mapper 被并发/重复执行。</p>
+ * <p>{@link #await()} 是<b>幂等</b>的——响应映射只在第一次 await 时执行一次，
+ * 成功/失败结果被缓存，后续 await 直接返回缓存。</p>
  */
 public final class CancellableAiCall {
 
-    /** 底层异步 HTTP 请求（cancel 即取消它）。为 null 时表示走 {@link #mappedResult} 链式路径。 */
-    private final CompletableFuture<HttpResponse<String>> future;
+    /**
+     * 一次网络调用的最小响应载荷：状态码 + 字符串 body。
+     */
+    public record HttpResponseFrame(int statusCode, String body) {
+    }
 
-    /** 把 HTTP 响应映射为最终文本（状态码检查 + JSON 解析，见实现类）。 */
-    private final Function<HttpResponse<String>, String> responseMapper;
+    /** 底层异步网络请求（cancel 即取消它）。为 null 时表示走 {@link #mappedResult} 链式路径。 */
+    private final CompletableFuture<HttpResponseFrame> future;
+
+    /** 把网络响应帧映射为最终文本（状态码检查 + JSON 解析，见实现类）。 */
+    private final Function<HttpResponseFrame, String> responseMapper;
 
     /**
-     * 链式映射结果 future：用于"整条链路已编排为 CompletableFuture 链"的入口
-     * （典型场景：JSON 降级重试——两次 sendAsync 用 thenCompose 拼成同一条链，
-     * 这样 cancel 贯通整条链路，不会在降级分支失效）。
-     *
-     * <p>与 {@link #future}/{@link #responseMapper} 二选一：同时只能有一个非 null。
-     * 二者并存会让 cancel/await 语义含糊，故构造时强制约束。</p>
+     * 链式结果 future（与 {@link #future}/{@link #responseMapper} 二选一）：
+     * 用于 JSON 降级重试等已用 thenCompose 编排好的整条链路。
      */
     private final CompletableFuture<String> mappedResult;
 
@@ -46,11 +45,11 @@ public final class CancellableAiCall {
     private AiException cachedFailure;
 
     /**
-     * @param future         异步 HTTP 请求。
-     * @param responseMapper 响应 → 文本的映射函数（可抛 AiException）。
+     * @param future         异步网络请求（已包成 frame 的 future）。
+     * @param responseMapper frame → 文本的映射函数（可抛 AiException）。
      */
-    public CancellableAiCall(CompletableFuture<HttpResponse<String>> future,
-                             Function<HttpResponse<String>, String> responseMapper) {
+    public CancellableAiCall(CompletableFuture<HttpResponseFrame> future,
+                             Function<HttpResponseFrame, String> responseMapper) {
         this.future = future;
         this.responseMapper = responseMapper;
         this.mappedResult = null;
@@ -60,11 +59,7 @@ public final class CancellableAiCall {
      * 链式结果构造：调用方已用 {@code thenCompose} / {@code thenApply} 把整条响应处理
      * 链路编排为一个 {@link CompletableFuture}，本工厂直接包装。
      *
-     * <p><b>为什么需要这个入口：</b>{@link com.auditai.burp.ai.OpenAiCompatibleClient}
-     * 的 JSON 降级重试路径要保证 cancel 贯通到第二次 sendAsync——若仍走"首请求 future
-     * + 同步重试 mapper"的两段式结构，cancel 只能中断首请求，第二次同步 send
-     * 会让 await 阻塞到 JDK HTTP 自身超时。链路必须编排成"两次 sendAsync thenCompose
-     * 拼成一条 CompletableFuture 链"，{@code cancel(true)} 才能在整条链上收得到。</p>
+     * <p>JSON 降级重试路径专用：两次出站必须挂同一条链，cancel 才能贯通到第二次。</p>
      *
      * @param mappedResult 已编排好的结果 future；await 时直接 join 即可。
      */
@@ -79,30 +74,12 @@ public final class CancellableAiCall {
     }
 
     /**
-     * 暴露底层 future 给同包内的"重试包装"使用：包内调用方拿到底层 future
-     * 后可构造一个新的 {@link CancellableAiCall} 复用同一请求的 await/cancel 语义。
+     * 链式替换响应映射器：复用同一个底层 {@link CompletableFuture}，await 阶段改用新 mapper。
      *
-     * <p>仅在构造时传入 HttpResponse future 的对象上可用；链式路径返回 null，
-     * 调用方应改用 {@link #fromChained} 重新构造。</p>
-     *
-     * @return 底层 {@link CompletableFuture}；引用本对象生命周期内有效，调用方不应缓存。
+     * <p>链式路径调用本方法会抛 {@link IllegalStateException}——链式结果已经是 String，
+     * 套一层 frame 映射语义上不成立。</p>
      */
-    public CompletableFuture<HttpResponse<String>> futureForAwait() {
-        return future;
-    }
-
-    /**
-     * 链式替换响应映射器：返回一个新的 {@link CancellableAiCall}，复用同一个底层
-     * {@link CompletableFuture}，但 await 阶段改用 {@code mapper} 处理响应。
-     *
-     * <p>仅适用于"底层 future 是 HttpResponse"的对象；链式路径调用本方法会抛
-     * {@link IllegalStateException}（链式路径的结果已经是 String，再套一层
-     * HttpResponse 映射语义上不成立——请用 {@link #fromChained} 重新编排）。</p>
-     *
-     * @param mapper 新的响应 → 文本映射函数。
-     * @return 包装同一 future 的新 {@link CancellableAiCall}。
-     */
-    public CancellableAiCall mapResponse(Function<HttpResponse<String>, String> mapper) {
+    public CancellableAiCall mapResponse(Function<HttpResponseFrame, String> mapper) {
         if (mappedResult != null) {
             throw new IllegalStateException(
                     "mapResponse 不能用于已链式映射的 CancellableAiCall——请改用 CancellableAiCall.fromChained 重新编排整条链。");
@@ -111,13 +88,7 @@ public final class CancellableAiCall {
     }
 
     /**
-     * 阻塞等待调用完成并返回模型文本。
-     *
-     * <p>幂等：无论调用多少次，底层请求与响应映射都只会执行一次；后续调用直接
-     * 返回第一次的结果（或重抛第一次的失败）。</p>
-     *
-     * @return 模型返回的文本内容。
-     * @throws AiException 网络错误、鉴权失败、响应解析失败、或被取消时抛出。
+     * 阻塞等待调用完成并返回模型文本。幂等。
      */
     public synchronized String await() throws AiException {
         if (computed) {
@@ -130,7 +101,6 @@ public final class CancellableAiCall {
             String result;
             if (mappedResult != null) {
                 // 链式路径：整条响应处理已编排好，直接 join 即可。
-                // 取消传播由 CompletableFuture 链本身保证（cancel(true) 会中断所有未完成阶段）。
                 try {
                     result = mappedResult.join();
                 } catch (CancellationException e) {
@@ -154,10 +124,9 @@ public final class CancellableAiCall {
     /** 真正执行一次 await（由 {@link #await()} 的缓存逻辑调用）。 */
     private String awaitOnce() throws AiException {
         try {
-            HttpResponse<String> response = future.join();
-            return mapResponse(response);
+            HttpResponseFrame frame = future.join();
+            return mapResponse(frame);
         } catch (CancellationException e) {
-            // 用户点了 Cancel：把"取消"转成可读的业务信息
             throw AiException.cancelled(e);
         } catch (CompletionException e) {
             throw unwrapAi(e);
@@ -170,24 +139,23 @@ public final class CancellableAiCall {
         if (cause instanceof AiException ai) {
             return ai;
         }
-        // JDK {@link java.net.http.HttpClient#sendAsync} 的 cancel(true) 把 future 标为
-        // "exceptionally completed with CancellationException"（{@code isCancelled()}
-        // 返回 false 但 {@code isDone()} true）。{@code join()} 抛
-        // {@code CompletionException(CancellationException)}，必须重新识别为取消
-        // 并抛 {@link AiException#cancelled}，否则调用方会把它当普通失败处理。
+        // cancel 后 future 以 CancellationException 异常完成（isCancelled() 为 false），
+        // 须重新识别为取消，否则会被当普通失败处理。
         if (cause instanceof CancellationException) {
             return AiException.cancelled(cause);
+        }
+        if (cause instanceof java.util.concurrent.TimeoutException) {
+            return new AiException("AI 请求超时：超过设置的超时时间，请检查网络或调大超时。", cause);
         }
         return new AiException("调用 AI 接口失败：" + (cause != null ? cause.getMessage() : e.getMessage()), cause);
     }
 
     /**
-     * 执行响应 → 文本映射，并把映射阶段抛出的非业务异常统一包装为 {@link AiException}，
-     * 避免原始 NPE / JsonSyntaxException 等裸抛给 UI（表现为难读的原始异常文案）。
+     * 执行响应 → 文本映射，并把映射阶段抛出的非业务异常统一包装为 {@link AiException}。
      */
-    private String mapResponse(HttpResponse<String> response) throws AiException {
+    private String mapResponse(HttpResponseFrame frame) throws AiException {
         try {
-            return responseMapper.apply(response);
+            return responseMapper.apply(frame);
         } catch (AiException e) {
             throw e;
         } catch (RuntimeException e) {
@@ -196,9 +164,7 @@ public final class CancellableAiCall {
     }
 
     /**
-     * 取消本次调用：中断进行中的 HTTP 请求。链式路径会一次性取消整条
-     * {@link CompletableFuture} 链（包括重试分支），不再有"降级重试无法取消"
-     * 的语义漏洞。
+     * 取消本次调用：链式路径一次性取消整条 {@link CompletableFuture} 链（包括重试分支）。
      *
      * @return 是否成功取消（已完成的调用返回 false）。
      */

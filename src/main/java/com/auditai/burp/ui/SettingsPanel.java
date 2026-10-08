@@ -31,7 +31,6 @@ import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import javax.swing.UIManager;
-import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
@@ -50,6 +49,10 @@ import java.util.Comparator;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * "设置"页签：垂直排布两个功能区。
@@ -152,6 +155,17 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
     private final JSpinner maxTokensField = new JSpinner(new SpinnerNumberModel(AiConfig.DEFAULT_MAX_TOKENS, 128, 16384, 256));
     private final JButton testButton = RoundedButton.standard(I18n.button("ui.common.test"));
     private final JButton deleteServiceButton = RoundedButton.standard(I18n.button("ui.common.deleteSettings"));
+
+    /** "测试连接"专属 executor：Montoya sendRequest 是同步阻塞的，包成 CompletableFuture 才能 cancel 中断。daemon 线程，{@link #close} 时统一关闭。 */
+    private final ExecutorService testExecutor = Executors.newCachedThreadPool(new ThreadFactory() {
+        private final AtomicInteger n = new AtomicInteger();
+        @Override
+        public Thread newThread(Runnable r) {
+            Thread t = new Thread(r, "AuditAI-TestConnection-" + n.incrementAndGet());
+            t.setDaemon(true);
+            return t;
+        }
+    });
 
     /**
      * 当前"测试连接"对应的可取消句柄：在 {@link #testConnection} 起点持有，
@@ -990,7 +1004,7 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
         AiConfig temp = new AiConfig();
         applyFormToConfig(temp);
 
-        OpenAiCompatibleClient client = new OpenAiCompatibleClient(buildTestSettings(temp));
+        OpenAiCompatibleClient client = new OpenAiCompatibleClient(buildTestSettings(temp), testExecutor);
         CancellableAiCall call;
         try {
             call = client.completeAsync(
@@ -1489,6 +1503,9 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
         // 注销错误总线监听器：避免 PassiveAnalysisErrorBus 持有已卸载的 UI 引用。
         PassiveAnalysisErrorBus.INSTANCE.removeListener(passiveErrorListener);
         toast.close();
+        // 关闭测试连接专属 executor：cancelInflightTest 已经中断在飞请求，
+        // 此时再 shutdownNow 不会有挂起等待。
+        testExecutor.shutdownNow();
     }
 
     /**

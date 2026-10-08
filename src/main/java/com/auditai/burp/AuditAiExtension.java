@@ -90,9 +90,8 @@ public final class AuditAiExtension implements BurpExtension {
 
         // 3. 创建 AI 客户端：统一使用 OpenAI Chat Completions 兼容协议。
         //    远程服务填写 API Key；本地 Ollama / LM Studio 等可把 Key 留空。
-        //    注入 owned executor：JDK HttpClient 内部默认 cached executor 不可关闭，
-        //    插件重载后会有残留线程（thread name 默认带并发编号，泄漏迹象隐蔽）。
-        //    用守护线程工厂让 JVM 退出时不会因为 AI 线程卡死导致 Burp 关不掉。
+        //    注入 owned executor：JDK HttpClient 用它跑出站请求，close() 时统一关闭。
+        //    daemon 线程避免 Burp 退出时被卡住。
         ExecutorService aiHttpExecutor = Executors.newCachedThreadPool(new ThreadFactory() {
             private final AtomicInteger n = new AtomicInteger();
             @Override

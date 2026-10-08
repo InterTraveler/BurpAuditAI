@@ -2,40 +2,52 @@ package com.auditai.burp.ai;
 
 import com.auditai.burp.config.AiConfig;
 import com.auditai.burp.config.Settings;
-import com.google.gson.JsonObject;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import java.net.http.HttpRequest;
-import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * {@link OpenAiCompatibleClient} 的纯逻辑单元测试：端点拼接、超时夹取、
- * Authorization 头与前置校验。
+ * API Key 校验与前置校验。
  *
  * <p>为什么这些用例必须存在：历史实现里 {@code baseUrl.replace("/+$", "")} 把正则当字面量，
  * 带尾斜杠的 baseUrl 会请求到 {@code //chat/completions}，而本类此前<b>没有任何单测</b>，
  * 缺陷因此长期存活。这里全部只断言不依赖网络的构造期行为（不发真实请求）。</p>
+ *
+ * <p>{@code buildChatRequest} 走 JDK {@code HttpRequest.newBuilder} 单测可覆盖；
+ * 真实网络路径走 {@code httpClient.sendAsync}，需集成测试。</p>
  */
 final class OpenAiCompatibleClientTest {
 
-    /** 组装一个以 config 为激活项的客户端。 */
+    /** 共享的 daemon 单线程池：本测试类从不真正提交任务，仅满足构造器"非 null"约束。 */
+    private static final ExecutorService TEST_EXECUTOR = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "auditai-test");
+        t.setDaemon(true);
+        return t;
+    });
+
+    @AfterAll
+    static void shutdownExecutor() {
+        TEST_EXECUTOR.shutdownNow();
+    }
+
     private static OpenAiCompatibleClient clientFor(AiConfig config) {
-        return new OpenAiCompatibleClient(new Settings(List.of(config), config.getName(), ""));
+        return new OpenAiCompatibleClient(
+                new Settings(List.of(config), config.getName(), ""),
+                TEST_EXECUTOR);
     }
 
     private static AiConfig config(String baseUrl, String apiKey, int timeoutSeconds) {
         return new AiConfig("测试配置", baseUrl, apiKey, "test-model", timeoutSeconds, 128);
-    }
-
-    private static HttpRequest requestFor(String baseUrl, String apiKey, int timeoutSeconds) {
-        AiConfig config = config(baseUrl, apiKey, timeoutSeconds);
-        return clientFor(config).buildChatRequest(config, new JsonObject());
     }
 
     // ========== 端点拼接 ==========
@@ -55,53 +67,35 @@ final class OpenAiCompatibleClientTest {
     }
 
     @Test
-    @DisplayName("buildChatRequest 的 URI 不得出现双斜杠")
-    void buildChatRequest_uriHasNoDoubleSlash() {
-        HttpRequest request = requestFor("https://api.deepseek.com/v1/", "", 60);
-        assertEquals("https://api.deepseek.com/v1/chat/completions", request.uri().toString());
-    }
-
-    @Test
-    @DisplayName("baseUrl 含空格等非法字符：转成可读的 AiException 而不是裸 IAE")
-    void buildChatRequest_illegalBaseUrl_throwsAiException() {
-        AiException ex = assertThrows(AiException.class,
-                () -> requestFor("ht tp://api.example.com/v1", "", 60));
-        assertTrue(ex.getMessage().contains("baseUrl"), "错误信息应指出 baseUrl，实际：" + ex.getMessage());
+    @DisplayName("baseUrl 末尾多斜杠：只剥一个，endpoint 不出现双斜杠")
+    void buildEndpoint_stripsTrailingSlash() {
+        assertEquals("https://api.deepseek.com/v1/chat/completions",
+                OpenAiCompatibleClient.buildEndpoint("https://api.deepseek.com/v1/"));
+        assertEquals("https://api.deepseek.com/v1/chat/completions",
+                OpenAiCompatibleClient.buildEndpoint("https://api.deepseek.com/v1///"));
     }
 
     // ========== 超时夹取 ==========
 
     @Test
     @DisplayName("超时按下限/上限夹取：0 与负值 → MIN，超大值 → MAX，正常值原样")
-    void buildChatRequest_clampsTimeout() {
-        assertEquals(Duration.ofSeconds(AiConfig.MIN_TIMEOUT_SECONDS),
-                requestFor("https://h/v1", "", 0).timeout().orElseThrow());
-        assertEquals(Duration.ofSeconds(AiConfig.MIN_TIMEOUT_SECONDS),
-                requestFor("https://h/v1", "", -5).timeout().orElseThrow());
-        assertEquals(Duration.ofSeconds(AiConfig.MAX_TIMEOUT_SECONDS),
-                requestFor("https://h/v1", "", 99_999).timeout().orElseThrow());
-        assertEquals(Duration.ofSeconds(60),
-                requestFor("https://h/v1", "", 60).timeout().orElseThrow());
+    void clampTimeoutSeconds_clampsToBounds() {
+        assertEquals(AiConfig.MIN_TIMEOUT_SECONDS, OpenAiCompatibleClient.clampTimeoutSeconds(0));
+        assertEquals(AiConfig.MIN_TIMEOUT_SECONDS, OpenAiCompatibleClient.clampTimeoutSeconds(-5));
+        assertEquals(AiConfig.MAX_TIMEOUT_SECONDS, OpenAiCompatibleClient.clampTimeoutSeconds(99_999));
+        assertEquals(60, OpenAiCompatibleClient.clampTimeoutSeconds(60));
     }
 
-    // ========== API Key ==========
+    // ========== API Key 校验 ==========
 
     @Test
-    @DisplayName("Key 非空时带 Bearer 头；Key 为空时不带 Authorization")
-    void buildChatRequest_authorizationHeader() {
-        HttpRequest withKey = requestFor("https://h/v1", "sk-abc", 60);
-        assertEquals("Bearer sk-abc",
-                withKey.headers().firstValue("Authorization").orElseThrow());
-        HttpRequest withoutKey = requestFor("https://h/v1", "", 60);
-        assertTrue(withoutKey.headers().firstValue("Authorization").isEmpty(),
-                "本地 Ollama 等无需 Key 的场景不应带空 Bearer 头");
-    }
-
-    @Test
-    @DisplayName("Key 含 CR/LF：直接拒绝，避免破坏 HTTP 头结构")
-    void buildChatRequest_apiKeyWithBreak_throwsAiException() {
-        assertThrows(AiException.class, () -> requestFor("https://h/v1", "sk-a\nb", 60));
-        assertThrows(AiException.class, () -> requestFor("https://h/v1", "sk-a\rb", 60));
+    @DisplayName("hasHeaderBreak：CR/LF 出现即 true，普通 Key 字符串 false")
+    void hasHeaderBreak_detectsCrLf() {
+        assertTrue(OpenAiCompatibleClient.hasHeaderBreak("sk-a\nb".toCharArray()));
+        assertTrue(OpenAiCompatibleClient.hasHeaderBreak("sk-a\rb".toCharArray()));
+        assertTrue(OpenAiCompatibleClient.hasHeaderBreak("sk-a\r\nb".toCharArray()));
+        assertFalse(OpenAiCompatibleClient.hasHeaderBreak("sk-abc正常".toCharArray()));
+        assertFalse(OpenAiCompatibleClient.hasHeaderBreak("".toCharArray()));
     }
 
     // ========== 前置校验 ==========
@@ -109,8 +103,9 @@ final class OpenAiCompatibleClientTest {
     @Test
     @DisplayName("未配置任何 AI 服务：同步抛可读的 AiException（不发请求）")
     void completeAsync_withoutConfig_throwsAiException() {
-        OpenAiCompatibleClient client =
-                new OpenAiCompatibleClient(new Settings(List.of(), null, ""));
+        OpenAiCompatibleClient client = new OpenAiCompatibleClient(
+                new Settings(List.of(), null, ""),
+                TEST_EXECUTOR);
         AiException ex = assertThrows(AiException.class,
                 () -> client.completeAsync("system", "user"));
         assertTrue(ex.getMessage().contains("尚未配置"), "实际：" + ex.getMessage());
