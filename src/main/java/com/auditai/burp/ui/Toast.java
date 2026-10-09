@@ -31,28 +31,26 @@ import java.util.TimerTask;
 /**
  * 非模态 Toast 提示：浮在宿主面板右下角，默认约 3 秒后淡出消失。
  *
- * <p>卡片背景自绘（深色半透明圆角），文字由内嵌 {@link JTextArea} 渲染——
- * 自绘负责外观与淡出透明度，JTextArea 负责文字渲染、鼠标拖选与 Ctrl+C 复制。</p>
+ * 卡片背景自绘（深色半透明圆角），文字由内嵌 JTextArea 渲染——
+ * 自绘负责外观与淡出透明度，JTextArea 负责文字渲染、鼠标拖选与 Ctrl+C 复制。
  *
- * <p><b>交互说明</b>：右上角"×"按钮立即关闭；文字区可拖选 Ctrl+C 复制；
- * {@link #showError} 错误模式<b>常驻</b>，不启动倒计时，必须用户主动关闭。</p>
+ * 交互说明：右上角"×"按钮立即关闭；文字区可拖选 Ctrl+C 复制；
+ * showError 错误模式常驻，不启动倒计时，必须用户主动关闭。
  *
- * <p><b>自动消失的双保险（Burp 兼容性关键）</b>：</p>
- * <ul>
- *   <li>{@link javax.swing.Timer} 的 TimerQueue 绑定创建线程的 AppContext；Burp
+ * 自动消失的双保险（Burp 兼容性关键）：
+ *   javax.swing.Timer 的 TimerQueue 绑定创建线程的 AppContext；Burp
  *       加载扩展的线程与 EDT 往往不在同一 AppContext，构造函数里创建 Timer 会
  *       让事件永远到不了 EDT（表现：PreviewApp 正常、Burp 里不消失）。因此
- *       Swing Timer 在 {@link #show(String, int)} 里<b>惰性创建</b>，show() 必然
- *       运行在 EDT（按钮点击 / SwingWorker.done）；</li>
- *   <li>另设一个独立守护线程（{@link java.util.Timer}）兜底：到点后若 Toast 仍可见则
- *       直接隐藏，不依赖 Swing 事件分发；用 generation 计数防止旧任务误伤新提示。</li>
- * </ul>
+ *       Swing Timer 在  #show(String, int) 里惰性创建，show() 必然
+ *       运行在 EDT（按钮点击 / SwingWorker.done）；
+ *   另设一个独立守护线程（java.util.Timer）兜底：到点后若 Toast 仍可见则
+ *       直接隐藏，不依赖 Swing 事件分发；用 generation 计数防止旧任务误伤新提示。
  *
- * <p>用法：{@code toast.show("已保存。")} 默认 3 秒后淡出；异步场景（如测试连接）
+ * 用法：{@code toast.show("已保存。")} 默认 3 秒后淡出；异步场景（如测试连接）
  * 先 {@code toast.showPersistent("正在测试…")}（不自动消失），出结果后再用
  * {@code toast.show("连接成功")} 替换内容。即使传 {@code durationMs <= 0} 也受
- * {@link #MAX_STAY_MS} 上限约束，绝不会永久滞留（仅 {@link #showPersistent} /
- * {@link #showError} 例外，由调用方保证最终替换 / 关闭）。</p>
+ * MAX_STAY_MS 上限约束，绝不会永久滞留（仅 showPersistent /
+ * showError 例外，由调用方保证最终替换 / 关闭）。
  */
 public final class Toast extends JComponent {
 
@@ -129,7 +127,7 @@ public final class Toast extends JComponent {
     private TimerTask forceHideTask;
     /** 代次：每次 show() 递增；兜底任务用快照值判断自己是否已过期。 */
     private long generation;
-    /** close() 后为 true：{@link #scheduler} 已 cancel，后续 show/showError/showPersistent 必须静默返回。 */
+    /** close() 后为 true：scheduler 已 cancel，后续 show/showError/showPersistent 必须静默返回。 */
     private volatile boolean closed;
 
     /** 当前是否处于"错误常驻"模式：关闭前不自动消失。 */
@@ -239,11 +237,11 @@ public final class Toast extends JComponent {
     }
 
     /**
-     * 显示一条常驻 Toast：不启动自动隐藏，直到被下一次 {@link #show(String, int)}
-     * 替换或 {@link #close()} 关闭。适合异步操作的"进行中"反馈（如"正在测试连接…"），
+     * 显示一条常驻 Toast：不启动自动隐藏，直到被下一次  #show(String, int)
+     * 替换或 close() 关闭。适合异步操作的"进行中"反馈（如"正在测试连接…"），
      * 让用户在整个等待期间都看得到状态，而不是默认 3 秒后凭空消失。
      *
-     * <p>必须在 EDT 上调用（{@link #show(String, int)} 同）。</p>
+     * 必须在 EDT 上调用（ #show(String, int) 同）。
      */
     public void showPersistent(String message) {
         if (closed) {
@@ -308,7 +306,7 @@ public final class Toast extends JComponent {
      * 显示一条 Toast。
      *
      * @param message    提示文本（可为空）。
-     * @param durationMs 自动消失时长（毫秒）；{@code <= 0} 时按 {@link #MAX_STAY_MS}
+     * @param durationMs 自动消失时长（毫秒）；{@code <= 0} 时按 MAX_STAY_MS
      *                   兜底，避免提示永久滞留。
      */
     public void show(String message, int durationMs) {
@@ -355,7 +353,7 @@ public final class Toast extends JComponent {
 
     /**
      * 立即隐藏当前 Toast（含常驻模式挂起的提示），不依赖自动倒计时。
-     * 与 {@link #close()} 的区别是本方法不动 {@link #closed} 标志、不 cancel 调度器。
+     * 与 close() 的区别是本方法不动 closed 标志、不 cancel 调度器。
      * 线程安全：从任意线程调用都会把隐藏操作切到 EDT 执行。
      */
     public void dismiss() {
@@ -381,8 +379,8 @@ public final class Toast extends JComponent {
     /**
      * 真正隐藏。可从 EDT（淡出结束）或守护线程（兜底）调用；幂等。
      *
-     * <p>注意：不能命名为 hide()，否则会重写 {@link java.awt.Component#hide()} 废弃方法，
-     * 导致 setVisible(false) 内部回调本方法造成无限递归、栈溢出。</p>
+     * 注意：不能命名为 hide()，否则会重写 java.awt.Component.hide() 废弃方法，
+     * 导致 setVisible(false) 内部回调本方法造成无限递归、栈溢出。
      */
     private void dismissNow() {
         if (dismissed) {
@@ -479,7 +477,7 @@ public final class Toast extends JComponent {
         contentArea.setSelectionEnd(0);
     }
 
-    /** 按 \n 切行后保留前 {@link #MAX_LINES} 行；超出截断并加省略号。行内换行交给 JTextArea。 */
+    /** 按 \n 切行后保留前 MAX_LINES 行；超出截断并加省略号。行内换行交给 JTextArea。 */
     private String truncateByLines(String source) {
         String normalized = source.replace("\r", "");
         String[] rawLines = normalized.split("\n", -1);

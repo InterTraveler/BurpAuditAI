@@ -25,32 +25,28 @@ import java.util.function.Consumer;
 /**
  * 单个技能的卡片视图。
  *
- * <p>布局：水平 {@link BorderLayout}，左侧是固定正方形的图标区（居中显示单字符 / emoji），
+ * 布局：水平 BorderLayout，左侧是固定正方形的图标区（居中显示单字符 / emoji），
  * 中间是技能名称（垂直居中），右侧是状态徽章区域（启用态显示绿色 ✓，自动激活态显示橙色 📌）。
- * 整张卡片带浅色描边、内边距，鼠标悬停时高亮背景、按下时切换为"已选"色，</p>
+ * 整张卡片带浅色描边、内边距，鼠标悬停时高亮背景、按下时切换为"已选"色，
  *
- * <p><b>状态视觉：</b></p>
- * <ul>
- *   <li>禁用（默认）：灰色细边框，无徽章；</li>
- *   <li>启用：<b>绿色</b>细边框，右侧徽章区显示绿色对号 ✓；</li>
- *   <li>自动激活：同样<b>绿色</b>细边框（与"启用"同色，刻意保持视觉上的同一类），
+ * 状态视觉：
+ *   禁用（默认）：灰色细边框，无徽章；
+ *   启用：绿色细边框，右侧徽章区显示绿色对号 ✓；
+ *   自动激活：同样绿色细边框（与"启用"同色，刻意保持视觉上的同一类），
  *       徽章区显示绿色图钉 📌——通过字符形状差异（✓ vs 📌）一眼分辨哪些是"无需模型选择、
- *       每次都注入"的常驻能力。</li>
- * </ul>
+ *       每次都注入"的常驻能力。
  *
- * <p><b>交互：</b></p>
- * <ul>
- *   <li>左键单击：通过 {@code onClick} 回调通知宿主（无论状态都响应——
- *       查看详情不受状态限制）；</li>
- *   <li>右键弹出菜单：根据当前状态显示"启用 / 禁用"、"自动激活 / 取消自动激活"两个独立项；
- *       用户技能额外有"卸载"项，内置技能的"卸载"项置灰不可点；</li>
- *   <li>状态切换：通过 {@code onToggle}（启用 / 禁用）和 {@code onPin}
+ * 交互：
+ *   左键单击：通过 {@code onClick} 回调通知宿主（无论状态都响应——
+ *       查看详情不受状态限制）；
+ *   右键弹出菜单：根据当前状态显示"启用 / 禁用"、"自动激活 / 取消自动激活"两个独立项；
+ *       用户技能额外有"卸载"项，内置技能的"卸载"项置灰不可点；
+ *   状态切换：通过 {@code onToggle}（启用 / 禁用）和 {@code onPin}
  *       （自动激活 / 取消自动激活）两个独立回调通知宿主——两者解耦，让 SkillsPanel
- *       各自维护独立的注册表。</li>
- * </ul>
+ *       各自维护独立的注册表。
  *
- * <p>尺寸约定：只设 {@code preferredSize}，不限制最大/最小尺寸——这样
- * {@link WrapLayout} 可以按卡片原始宽度自动换行。</p>
+ * 尺寸约定：只设 {@code preferredSize}，不限制最大/最小尺寸——这样
+ * WrapLayout 可以按卡片原始宽度自动换行。
  */
 public final class SkillCard extends JPanel implements LocaleAware {
 
@@ -88,11 +84,11 @@ public final class SkillCard extends JPanel implements LocaleAware {
     private boolean pinned;
 
     /**
-     * @param skill       技能数据；{@link Skill#source()} 决定"卸载"项是否可用。
-     * @param enabled     初始启用态；调用 {@link #setSkillEnabled(boolean)} 之后会实时反映到 UI。
-     * @param pinned      初始"自动激活"态；调用 {@link #setPinned(boolean)} 之后会实时反映到 UI。
+     * @param skill       技能数据；Skill.source() 决定"卸载"项是否可用。
+     * @param enabled     初始启用态；调用 setSkillEnabled(boolean) 之后会实时反映到 UI。
+     * @param pinned      初始"自动激活"态；调用 setPinned(boolean) 之后会实时反映到 UI。
      *                    业务约束：{@code pinned=true} 隐含 {@code enabled=true}，
-     *                    调用 {@link #setSkillEnabled(boolean)} 时若设为 false 应同步清掉 pinned。
+     *                    调用 setSkillEnabled(boolean) 时若设为 false 应同步清掉 pinned。
      * @param onClick     左键点击回调；传 null 时不响应左键。
      * @param onToggle    启用 / 禁用切换回调（参数为新的启用态）；传 null 时右键菜单不显示切换项。
      * @param onPin       "自动激活 / 取消自动激活" 回调（参数为新的 pinned 态）；
@@ -177,7 +173,7 @@ public final class SkillCard extends JPanel implements LocaleAware {
     /**
      * 兼容旧构造（无 pinned / onPin）：保持旧调用方与现有测试不变。
      *
-     * <p>等价于 {@code new SkillCard(skill, enabled, false, onClick, onToggle, null, onUninstall)}。</p>
+     * 等价于 {@code new SkillCard(skill, enabled, false, onClick, onToggle, null, onUninstall)}。
      */
     public SkillCard(Skill skill, boolean enabled,
                      Consumer<Skill> onClick,
@@ -189,17 +185,17 @@ public final class SkillCard extends JPanel implements LocaleAware {
     /**
      * 切换启用态并刷新视觉（边框颜色 + 右下角徽章 + 右键菜单项）。
      *
-     * <p>本方法会同步触发 {@code repaint()}，调用方无需手动重画。
+     * 本方法会同步触发 {@code repaint()}，调用方无需手动重画。
      * 右键菜单需要整体重建——菜单项文案是构造时根据初始状态决定的，
-     * 切换后必须替换否则用户会看到与状态不符的菜单项。</p>
+     * 切换后必须替换否则用户会看到与状态不符的菜单项。
      *
-     * <p><b>业务约束：</b>把启用从 true 切到 false 时同步清掉 pinned——"自动激活"
+     * 业务约束：把启用从 true 切到 false 时同步清掉 pinned——"自动激活"
      * 隐含启用，禁用时不可能还处于自动激活。这一步在方法体内自动完成，
-     * 由后续 {@code refreshVisual()} 一起画出新边框 + 徽章 + 菜单。</p>
+     * 由后续 {@code refreshVisual()} 一起画出新边框 + 徽章 + 菜单。
      *
-     * <p>命名 {@code setSkillEnabled} 而非覆写 {@link #setEnabled(boolean)}：
+     * 命名 {@code setSkillEnabled} 而非覆写 setEnabled(boolean)：
      * 本方法只管理"技能启用"的业务状态（边框 / 徽章 / 菜单），不改变 Swing
-     * 组件本身的 enable 语义（焦点、事件派发、无障碍仍走 JComponent）。</p>
+     * 组件本身的 enable 语义（焦点、事件派发、无障碍仍走 JComponent）。
      */
     public void setSkillEnabled(boolean enabled) {
         this.enabled = enabled;
@@ -212,12 +208,12 @@ public final class SkillCard extends JPanel implements LocaleAware {
     /**
      * 切换"自动激活"态并刷新视觉（边框颜色 + 右下角徽章 + 右键菜单项）。
      *
-     * <p>把 pinned 从 false 切到 true 且当前 disabled 时，先把 enabled 设为 true——
+     * 把 pinned 从 false 切到 true 且当前 disabled 时，先把 enabled 设为 true——
      * 自动激活必须启用，否则 SkillsPanel 的 enabledIds / pinnedIds 会不一致。
-     * 这里直接调 {@link #setSkillEnabled(boolean)}：它会把 {@code enabled=true}
-     * 应用后再走一次 {@link #refreshVisual()}，所以本方法最后再调一次
+     * 这里直接调 setSkillEnabled(boolean)：它会把 {@code enabled=true}
+     * 应用后再走一次 refreshVisual()，所以本方法最后再调一次
      * {@code refreshVisual()} 看似冗余（实际不是——{@code this.pinned} 在
-     * {@code setSkillEnabled} 之后才被设置，需要把 pinned=true 纳入视觉刷新）。</p>
+     * {@code setSkillEnabled} 之后才被设置，需要把 pinned=true 纳入视觉刷新）。
      */
     public void setPinned(boolean pinned) {
         if (pinned && !this.enabled) {
@@ -300,17 +296,15 @@ public final class SkillCard extends JPanel implements LocaleAware {
     /**
      * 构建右键菜单：根据当前 enabled / pinned 态显示对应项。
      *
-     * <p>菜单结构（按顺序）：</p>
-     * <ul>
-     *   <li>启用 / 禁用（二选一）—— 存在即互斥；</li>
-     *   <li>自动激活 / 取消自动激活（二选一）—— pinned=false 时显示"自动激活"，
-     *       pinned=true 时显示"取消自动激活"；</li>
-     *   <li>卸载（仅用户技能可点，内置技能置灰）。</li>
-     * </ul>
+     * 菜单结构（按顺序）：
+     *   启用 / 禁用（二选一）—— 存在即互斥；
+     *   自动激活 / 取消自动激活（二选一）—— pinned=false 时显示"自动激活"，
+     *       pinned=true 时显示"取消自动激活"；
+     *   卸载（仅用户技能可点，内置技能置灰）。
      *
-     * <p><b>关键交互：</b>选"自动激活"且当前为禁用态时，先在卡片本地把 enabled 设为 true
+     * 关键交互：选"自动激活"且当前为禁用态时，先在卡片本地把 enabled 设为 true
      * 再触发 onPin(true) 与 onToggle(true)——让 SkillsPanel 同时把 id 加入
-     * enabledIds 与 pinnedIds，避免出现"pinned=true 但 enabled=false"的脏状态。</p>
+     * enabledIds 与 pinnedIds，避免出现"pinned=true 但 enabled=false"的脏状态。
      */
     private JPopupMenu buildContextMenu() {
         JPopupMenu menu = new JPopupMenu();

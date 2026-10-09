@@ -16,16 +16,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@link AnalysisResponseParser#tryParseSelection} /
  * {@link AnalysisResponseParser#resolveSelection} 的协议兼容单元测试。
  *
- * <p>重点覆盖"非协议格式"——某些推理模型（o1 / o3 / DeepSeek-R1 / Gemini Thinking 等）习惯用
+ * 重点覆盖"非协议格式"——某些推理模型（o1 / o3 / DeepSeek-R1 / Gemini Thinking 等）习惯用
  * {@code {"thoughts": "...", "response": "..."}} 表达"思考 + 回答"，
- * 而不是协议字段 {@code analysis}。如果解析器不兼容这种格式，会导致：</p>
- * <ol>
- *   <li>阶段 1 解析时 {@code analysis} 字段取不到 → 走阶段 2 兜底；</li>
- *   <li>阶段 2 工具循环又拿到同样格式 → 收尾时 {@code lastAnalysis=""}；
- *       用户既看不到 analysis，也看不到任何 finding，分析结果"丢失"。</li>
- * </ol>
+ * 而不是协议字段 {@code analysis}。如果解析器不兼容这种格式，会导致：
+ *   阶段 1 解析时 {@code analysis} 字段取不到 → 走阶段 2 兜底；
+ *   阶段 2 工具循环又拿到同样格式 → 收尾时 {@code lastAnalysis=""}；
+ *       用户既看不到 analysis，也看不到任何 finding，分析结果"丢失"。
  *
- * <p>本测试套件确保上述场景下用户至少能看到模型说了什么。</p>
+ * 本测试套件确保上述场景下用户至少能看到模型说了什么。
  */
 class AnalysisResponseParserTest {
 
@@ -53,7 +51,7 @@ class AnalysisResponseParserTest {
 
     /**
      * response / analysis 都是空、且 active_skill_ids=[] 时——
-     * 模型主动"啥都没说"，<b>不</b>走 phase 2，更不扩张到全量启用。
+     * 模型主动"啥都没说"，不走 phase 2，更不扩张到全量启用。
      * 走 {@code needPhase2(enabledSkills, "")} 会把 phase 2 调起来但没有任何
      * 技能提示，浪费一次模型调用。
      */
@@ -146,12 +144,10 @@ class AnalysisResponseParserTest {
      * 不应降级到全量兜底（那会把所有启用的技能 prompt 都塞进 phase 2 的 system 段，
      * 轻松吃掉几万 token 触发模型拒答 / 上下文溢出）。
      *
-     * <p>预期行为：</p>
-     * <ul>
-     *   <li>若模型同时给了 {@code analysis}，按用户实际意图收尾（skipPhase2 + 用其 analysis）；</li>
-     *   <li>若没给，按"模型没结论"兜底（skipPhase2 + 空 analysis）；</li>
-     *   <li>非法 id 列表通过 {@link AnalysisResponseParser.SelectionResult#unknownIds()} 透传给上层记日志。</li>
-     * </ul>
+     * 预期行为：
+     *   若模型同时给了 {@code analysis}，按用户实际意图收尾（skipPhase2 + 用其 analysis）；
+     *   若没给，按"模型没结论"兜底（skipPhase2 + 空 analysis）；
+     *   非法 id 列表通过 {@link AnalysisResponseParser.SelectionResult#unknownIds()} 透传给上层记日志。
      */
     @Test
     void allUnknownSkillIdsDoNotTriggerFullFallback() {
@@ -218,12 +214,12 @@ class AnalysisResponseParserTest {
 
     /**
      * 模型主动返回 {@code active_skill_ids=[]} + 空 analysis
-     * —— 这是"模型主动不要技能、且啥都没说"的语义，<b>必须</b>尊重——不允许扩张到全量
+     * —— 这是"模型主动不要技能、且啥都没说"的语义，必须尊重——不允许扩张到全量
      * 启用兜底，否则 phase 2 会在用户没要求的情况下偷偷塞所有启用技能的 prompt，
      * 单次分析轻松吃掉几万个 token。
      *
-     * <p>这条路径与"全部非法 id 触发全量兜底"是同源问题——两条路径都是
-     * "模型明确表达了'不要技能'"但被偷偷扩张。</p>
+     * 这条路径与"全部非法 id 触发全量兜底"是同源问题——两条路径都是
+     * "模型明确表达了'不要技能'"但被偷偷扩张。
      */
     @Test
     void emptyActiveIdsWithEmptyAnalysisDoesNotFallBackToAllEnabled() {

@@ -104,9 +104,9 @@ class SettingsPanelTest {
     /**
      * 关键回归测试：用户在"被动分析"区应当看到红字错误信息。
      *
-     * <p>验证：setError 后 JTextArea 文本应包含"网络错误"分类前缀 + 错误消息，
+     * 验证：setError 后 JTextArea 文本应包含"网络错误"分类前缀 + 错误消息，
      * 不应包含 HTML 标签字面字符（避免 LaF 下 <html> 原样暴露），
-     * 也不应包含 method/url 前缀（这些信息已在 Burp Output 日志里呈现）。</p>
+     * 也不应包含 method/url 前缀（这些信息已在 Burp Output 日志里呈现）。
      */
     @Test
     void passiveErrorLabelUpdatesOnSetError() throws Exception {
@@ -301,8 +301,8 @@ class SettingsPanelTest {
      * 否则下拉打开中 removeAllItems 会让用户悬停高亮位置跳变(用户反馈的
      * "鼠标位置抖动"现象);且大量无谓的全量重建 + Preferences 写。
      *
-     * <p>直接调 {@code flushIfPending()} 强制同步执行 serviceDebounce,
-     * 避开 300ms 防抖窗口的不确定性;然后断言下拉条目数 / 内容 / 选中项都和初始一致。</p>
+     * 直接调 {@code flushIfPending()} 强制同步执行 serviceDebounce,
+     * 避开 300ms 防抖窗口的不确定性;然后断言下拉条目数 / 内容 / 选中项都和初始一致。
      */
     @Test
     void aiServiceAutoSaveDoesNotRebuildDropdownOnFieldOnlyChange() throws Exception {
@@ -354,9 +354,9 @@ class SettingsPanelTest {
      * 触发 setText → DocumentListener → 重启 serviceDebounce,导致每 300ms
      * 再次 apply → 再次 setText → 再次 schedule,形成无限重画 + Preferences 反复写。
      *
-     * <p>观察 Preferences 的 aiServices 是否被多次覆写:
+     * 观察 Preferences 的 aiServices 是否被多次覆写:
      * 早期 bug 下,1s 窗口内 Preferences JSON 会被写多次(每次 saveSettings 都会
-     * 序列化整个 list);修复后应只在用户的最终编辑落地一次。</p>
+     * 序列化整个 list);修复后应只在用户的最终编辑落地一次。
      */
     @Test
     void autoSaveDoesNotTriggerEndlessRefreshLoop() throws Exception {

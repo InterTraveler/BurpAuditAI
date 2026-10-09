@@ -57,34 +57,32 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * "设置"页签：垂直排布两个功能区。
  *
- * <ul>
- *   <li><b>AI 服务</b>：支持保存多份 AI 服务配置（DeepSeek / Ollama / 自定义…），
+ *   AI 服务：支持保存多份 AI 服务配置（DeepSeek / Ollama / 自定义…），
  *       通过顶部下拉列表切换。下拉列表的最后一项是固定的占位项
  *       {@code addNewLabel}——选中它会立即新增一条全空的配置并切过去。
  *       当前激活项的字段统一使用 OpenAI Chat Completions 兼容协议，包含
  *       Base URL、可选 API Key、模型名、超时 / 最大 Token 两个公共参数，支持
  *       "测试连接"。底部按钮按顺序：测试连接 / 删除设置——表单字段随动：
  *       任意字段变化后 {@value #SERVICE_DEBOUNCE_MS}ms 自动保存到 settings + 磁盘，
- *       校验失败（名称空 / 重名 / 等于占位项）弹 Toast 提示并保留旧值。</li>
- *   <li><b>提示词</b>：编辑自定义系统提示词（留空 = 使用内置默认），可"恢复默认"。
- *       提示词是全局设置，不随 AI 服务配置切换。</li>
- * </ul>
+ *       校验失败（名称空 / 重名 / 等于占位项）弹 Toast 提示并保留旧值。
+ *   提示词：编辑自定义系统提示词（留空 = 使用内置默认），可"恢复默认"。
+ *       提示词是全局设置，不随 AI 服务配置切换。
  *
- * <p>自定义分析技能已迁出到独立 SKILLS 页签（见 {@code com.auditai.burp.skills}）。</p>
+ * 自定义分析技能已迁出到独立 SKILLS 页签（见 {@code com.auditai.burp.skills}）。
  *
- * <p>线程约定：测试连接是慢操作，使用 {@link SwingWorker} 在后台线程执行，
- * 避免阻塞 Swing 事件线程（EDT）。表单防抖（{@link DebouncedAction}）也仅在 EDT 上调度。</p>
+ * 线程约定：测试连接是慢操作，使用 SwingWorker 在后台线程执行，
+ * 避免阻塞 Swing 事件线程（EDT）。表单防抖（DebouncedAction）也仅在 EDT 上调度。
  *
- * <p>反馈约定：测试结果 / 自动保存校验失败统一用右下角非模态 Toast 提示（{@link Toast}），
- * 约 3 秒后自动淡出、不占布局空间，避免行内状态标签的 HTML 渲染与按钮布局偏移问题。</p>
+ * 反馈约定：测试结果 / 自动保存校验失败统一用右下角非模态 Toast 提示（Toast），
+ * 约 3 秒后自动淡出、不占布局空间，避免行内状态标签的 HTML 渲染与按钮布局偏移问题。
  *
- * <p>布局约定：GridBagLayout 每行都新建独立的 {@link GridBagConstraints} 实例
- * （见 {@link #addRow}），避免共享可变约束导致行位置塌陷、文字互相覆盖。</p>
+ * 布局约定：GridBagLayout 每行都新建独立的 GridBagConstraints 实例
+ * （见 addRow），避免共享可变约束导致行位置塌陷、文字互相覆盖。
  *
- * <p>数据流约定：本类持有 {@link Settings} 引用；表单字段变化经防抖调用
- * {@link #tryApplyFormToSettings} 整体替换 activeConfig——避免多字段非原子写
+ * 数据流约定：本类持有 Settings 引用；表单字段变化经防抖调用
+ * tryApplyFormToSettings 整体替换 activeConfig——避免多字段非原子写
  * 引发"新 baseUrl + 旧 model"的撕裂读。切换 / 增删也走同一入口，UI 表单是
- * 激活项的视图层。</p>
+ * 激活项的视图层。
  */
 public final class SettingsPanel extends JPanel implements LocaleAware {
 
@@ -93,8 +91,8 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
     /**
      * 下拉列表末位的占位项文字：选中后会立即在列表里新增一条全空配置。
      *
-     * <p>使用尖括号包裹让它的"非真实配置"语义一眼可辨；用户也不太可能给自己的
-     * 配置起这种名字（且 {@link #tryApplyFormToSettings} 里也会拒绝以这个名字保存）。</p>
+     * 使用尖括号包裹让它的"非真实配置"语义一眼可辨；用户也不太可能给自己的
+     * 配置起这种名字（且 tryApplyFormToSettings 里也会拒绝以这个名字保存）。
      */
     private String addNewLabel = I18n.get().t("ui.settings.addNew");
 
@@ -119,29 +117,29 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
 
     /**
      * 下拉列表的"用户操作"监听器（实例字段，确保 add/remove 是同一个对象）：
-     * {@link #refreshDropdown} 在批量改 items 之前摘掉它、改完再装回去，
+     * refreshDropdown 在批量改 items 之前摘掉它、改完再装回去，
      * 否则每条 {@code addItem} / {@code setSelectedItem} 都会触发回调、
-     * 递归调进 {@link #onDropdownChanged} 把列表状态搅乱。
+     * 递归调进 onDropdownChanged 把列表状态搅乱。
      *
-     * <p>注意：必须存成字段，不能写成 {@code () -> onDropdownChanged()} 形式——
+     * 注意：必须存成字段，不能写成 {@code () -> onDropdownChanged()} 形式——
      * 那样每次 addActionListener 时都会产生新的 lambda 实例，
      * {@code removeActionListener} 就摘不掉了（这是之前那个"保存后下拉只剩第一项"
-     * BUG 的根因）。</p>
+     * BUG 的根因）。
      */
     private final ActionListener dropdownChangeListener = e -> onDropdownChanged();
 
     /**
-     * 标记当前是否处于 {@link #refreshDropdown} 的"批量改 items"期间：
+     * 标记当前是否处于 refreshDropdown 的"批量改 items"期间：
      * 进入时置 true、退出时（finally）置 false。即便 listener 摘/装没起到作用
      * （例如 Swing 在某些版本上 listener 摘除时机不一致），这个标志位也能
-     * 拦住 {@link #onDropdownChanged} 的递归调用，避免 addItem /
+     * 拦住 onDropdownChanged 的递归调用，避免 addItem /
      * setSelectedItem 期间回调被反复触发。
      */
     private boolean refreshingDropdown;
 
     /**
      * 名称字段：独立占第 1 行（"名称:" 标签与其他行的标签同列对齐），
-     * 编辑后经 {@link #SERVICE_DEBOUNCE_MS}ms 防抖自动保存到 settings + 磁盘。
+     * 编辑后经 SERVICE_DEBOUNCE_MSms 防抖自动保存到 settings + 磁盘。
      */
     private final JTextField nameField = new JTextField(20);
 
@@ -156,7 +154,7 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
     private final JButton testButton = RoundedButton.standard(I18n.button("ui.common.test"));
     private final JButton deleteServiceButton = RoundedButton.standard(I18n.button("ui.common.deleteSettings"));
 
-    /** "测试连接"专属 executor：Montoya sendRequest 是同步阻塞的，包成 CompletableFuture 才能 cancel 中断。daemon 线程，{@link #close} 时统一关闭。 */
+    /** "测试连接"专属 executor：Montoya sendRequest 是同步阻塞的，包成 CompletableFuture 才能 cancel 中断。daemon 线程，close 时统一关闭。 */
     private final ExecutorService testExecutor = Executors.newCachedThreadPool(new ThreadFactory() {
         private final AtomicInteger n = new AtomicInteger();
         @Override
@@ -168,17 +166,17 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
     });
 
     /**
-     * 当前"测试连接"对应的可取消句柄：在 {@link #testConnection} 起点持有，
-     * 由 {@link #onDropdownChanged} / {@link #close} 调 {@link #cancelInflightTest}
+     * 当前"测试连接"对应的可取消句柄：在 testConnection 起点持有，
+     * 由 onDropdownChanged / close 调 cancelInflightTest
      * 中断，让下拉切换或面板卸载时旧 HTTP 请求能立刻停止而不再挂起到超时。
      *
-     * <p>{@code volatile} 与本类其他回调字段保持一致（见 {@link #passiveAnalysisSavedHook}）。</p>
+     * {@code volatile} 与本类其他回调字段保持一致（见 passiveAnalysisSavedHook）。
      */
     private volatile CancellableAiCall currentTestCall;
 
     /**
-     * 测试连接代次：{@link #testConnection} 起点递增 1，{@link #cancelInflightTest}
-     * 也会递增。{@link SwingWorker#done} 在闭包里捕获本次测试开始时的代次，
+     * 测试连接代次：testConnection 起点递增 1，cancelInflightTest
+     * 也会递增。SwingWorker.done 在闭包里捕获本次测试开始时的代次，
      * 回调触发时若不匹配，说明这次结果属于已被中断/替换的旧测试——直接 return
      * 不动 UI。
      */
@@ -192,36 +190,36 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
     /**
      * 提示词框当前内容是否为"内置默认提示词的参考展示"（而非用户草稿）。
      *
-     * <p>无自定义提示词时，框内展示当前语言的默认提示词供参考/修改。切语言时若框内
+     * 无自定义提示词时，框内展示当前语言的默认提示词供参考/修改。切语言时若框内
      * 仍是上一语言的"参考默认"（用户没动过），应跟随语言重填；但若用户已输入未保存的
      * 草稿，切换语言绝不能把它覆盖掉。用户一旦编辑（DocumentListener）或保存（savePrompt）
-     * 即置 false；resetPrompt 与 refreshI18n 重填默认后置 true。</p>
+     * 即置 false；resetPrompt 与 refreshI18n 重填默认后置 true。
      */
     private boolean promptAreaShowsDefault;
 
     // —— 被动分析区：开关 + URL 过滤正则（实时生效，无保存按钮） ——
     /**
      * 是否开启被动流量分析：开启后 AuditAI 自动分析 Proxy 转发到本进程的请求/响应。
-     * 默认关闭；勾选 / 取消立即通过 {@link #passiveAnalysisSavedHook} 推给 handler。
+     * 默认关闭；勾选 / 取消立即通过 passiveAnalysisSavedHook 推给 handler。
      */
     private final JCheckBox passiveEnabledCheck = I18n.checkBox("ui.settings.passiveEnable");
 
     /**
      * URL 过滤正则：仅分析 URL（含 query）匹配该正则的报文；留空匹配全部。
-     * 非法正则由 {@link com.auditai.burp.passive.UrlRegexFilter} 在运行期兜底
+     * 非法正则由 com.auditai.burp.passive.UrlRegexFilter 在运行期兜底
      * （回退到匹配全部 + 写日志），不在 UI 层阻断输入。
      * 修改后立即持久化 + 推给 handler，无需手动保存。
      */
     private final JTextField passiveRegexField = new JTextField(30);
 
     /**
-     * URL 过滤正则的实时校验状态行：紧贴 {@link #passiveRegexField} 下方，
-     * 用 {@link UrlRegexFilter#validate(String)} 在每次键入时刷新——告诉用户
+     * URL 过滤正则的实时校验状态行：紧贴 passiveRegexField 下方，
+     * 用 UrlRegexFilter.validate(String) 在每次键入时刷新——告诉用户
      * 当前输入是"空 / 合法 / 含伪正则翻译 / 非法"。
      *
-     * <p>不走 I18n 自动订阅：状态文案包含动态内容（用户原文 + 展开后的正则），
+     * 不走 I18n 自动订阅：状态文案包含动态内容（用户原文 + 展开后的正则），
      * 切语言时只能整体重算一次，不需要逐条订阅。
-     * 颜色按状态切换：EMPTY 灰、VALID/VALID_EXPANDED 绿、INVALID 红。</p>
+     * 颜色按状态切换：EMPTY 灰、VALID/VALID_EXPANDED 绿、INVALID 红。
      */
     private final JLabel passiveRegexStatusLabel = new JLabel(" ", JLabel.LEFT);
 
@@ -230,43 +228,41 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
      * 用来在 UI 改完配置后立刻把最新值推给 {@code PassiveAnalysisHandler}，避免
      * "改了但 Burp 还在用旧值"的撕裂感。
      *
-     * <p>不为 null 时在复选框 / 输入框变化时同步触发；为 null 时仅持久化、不广播
-     * （单测场景可注入 null）。</p>
+     * 不为 null 时在复选框 / 输入框变化时同步触发；为 null 时仅持久化、不广播
+     * （单测场景可注入 null）。
      *
-     * <p><b>volatile：</b>当前注入与触发都在 EDT 单线程，无需同步；加 volatile
-     * 仅为防御未来出现非 EDT 调用方。</p>
+     * volatile：当前注入与触发都在 EDT 单线程，无需同步；加 volatile
+     * 仅为防御未来出现非 EDT 调用方。
      */
     private volatile Runnable passiveAnalysisSavedHook;
 
     /**
-     * 被动分析错误状态变化回调：通常由 {@code MainTab} 注入，<b>在 EDT 上</b>触发，
+     * 被动分析错误状态变化回调：通常由 {@code MainTab} 注入，在 EDT 上触发，
      * 用于在"设置"页签标题右侧加 / 移感叹号，让用户停留在其他页签时也能感知到
      * 被动分析失败。
      *
-     * <p>回调签名为 {@code boolean hasError}：true 时外部应展示感叹号，
-     * false 时外部应清除感叹号（恢复原标题）。</p>
+     * 回调签名为 {@code boolean hasError}：true 时外部应展示感叹号，
+     * false 时外部应清除感叹号（恢复原标题）。
      *
-     * <p>为 null 时不通知外部（单测场景可注入 null）。</p>
+     * 为 null 时不通知外部（单测场景可注入 null）。
      */
     private volatile java.util.function.Consumer<Boolean> passiveAnalysisErrorChangedHook;
 
     /**
      * "被动分析"区下方的红字错误提示组件：常态为空（占位空白），错误时填充红字内容。
      *
-     * <p>采用 {@link JTextArea} 而非 {@link JLabel}：</p>
-     * <ul>
-     *   <li><b>不用 HTML</b>：Burp 的某些 LaF / Dark 主题下，{@code JLabel} 的 HTML 渲染
+     * 采用 JTextArea 而非 JLabel：
+     *   不用 HTML：Burp 的某些 LaF / Dark 主题下，{@code JLabel} 的 HTML 渲染
      *       可能直接以纯文本显示出来（带 {@code <html>} 字面量），用户能看到未渲染的标签
-     *       字符；{@code JTextArea} 是纯文本组件，输出什么就显示什么，绝无 HTML 解析；</li>
-     *   <li><b>自动换行</b>：错误消息可能很长（远端返回 300+ 字符的详细错误体），
+     *       字符；{@code JTextArea} 是纯文本组件，输出什么就显示什么，绝无 HTML 解析；
+     *   自动换行：错误消息可能很长（远端返回 300+ 字符的详细错误体），
      *       {@code JTextArea} 默认开启 {@code lineWrap + wrapStyleWord}，长文本按词换行，
-     *       不会撑爆窗口；</li>
-     *   <li><b>去边框 + 透明背景</b>：setOpaque(false) + setBorder(null) 让它视觉上像
-     *       一个"红字标签"，而不是个文本框。</li>
-     * </ul>
+     *       不会撑爆窗口；
+     *   去边框 + 透明背景：setOpaque(false) + setBorder(null) 让它视觉上像
+     *       一个"红字标签"，而不是个文本框。
      *
-     * <p>始终占布局位置（不切换 visible），用 setText 控制内容：常态设为单个空格
-     * 保留高度；错误时填充"⚠ 分类：消息"格式。</p>
+     * 始终占布局位置（不切换 visible），用 setText 控制内容：常态设为单个空格
+     * 保留高度；错误时填充"⚠ 分类：消息"格式。
      */
     private final JTextArea passiveErrorArea = new JTextArea(" ", 1, 0);
 
@@ -276,8 +272,8 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
     private final JPanel passiveErrorPanel = new JPanel(new BorderLayout());
 
     /**
-     * 缓存错误总线监听器引用：{@link #close} 时需要把同一个引用
-     * 传给 {@link PassiveAnalysisErrorBus#removeListener}——若每次用
+     * 缓存错误总线监听器引用：close 时需要把同一个引用
+     * 传给 PassiveAnalysisErrorBus.removeListener——若每次用
      * {@code this::onPassiveErrorChanged} 新建方法引用，remove 不会生效，
      * 错误总线会持有已销毁的 UI 对象。
      */
@@ -303,14 +299,14 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
     private final DebouncedAction passiveDebounce;
 
     /**
-     * AI 服务表单防抖动作：到点统一读取所有控件并走 {@link #tryApplyFormToSettings} 应用 + 持久化。
-     * 下拉切换 / 新增前会调用 {@link DebouncedAction#flushIfPending} 强行同步执行，
+     * AI 服务表单防抖动作：到点统一读取所有控件并走 tryApplyFormToSettings 应用 + 持久化。
+     * 下拉切换 / 新增前会调用 DebouncedAction.flushIfPending 强行同步执行，
      * 避免"切走时丢失防抖窗口内的编辑"。
      */
     private final DebouncedAction serviceDebounce;
 
     /**
-     * 生产构造器：注入 {@link MontoyaApi} 让 hook / 监听器异常走 Extender Output。
+     * 生产构造器：注入 MontoyaApi 让 hook / 监听器异常走 Extender Output。
      *
      * @param api           Montoya API 门面（不可为 null）。
      * @param settings      完整设置对象：所有写操作通过它生效。
@@ -429,18 +425,16 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
 
     /**
      * 构建"AI 服务"标题区：
-     * <pre>
      *   AI 服务: [DeepSeek ▼]
      *   名称:    [__________]
      *   Base URL / API Key / 模型 / 超时 / 最大 Token
      *   [测试连接]  [删除设置]
-     * </pre>
      *
-     * <p>下拉列表末尾固定一项 {@code addNewLabel}——选中它即视为"新增"指令，
+     * 下拉列表末尾固定一项 {@code addNewLabel}——选中它即视为"新增"指令，
      * 立刻在列表里追加一条全空配置并切过去。底部按钮只有
      * "测试连接 / 删除设置"——表单字段随动自动保存（见
-     * {@link #wireAiServiceListeners} 与 {@link #applyAiServiceChange}）。所有配置
-     * 都是用户自己加的，没有"内置项不可删"或"恢复默认"这类例外。</p>
+     * wireAiServiceListeners 与 applyAiServiceChange）。所有配置
+     * 都是用户自己加的，没有"内置项不可删"或"恢复默认"这类例外。
      */
     private JPanel buildServiceSection() {
         JPanel panel = new JPanel(new BorderLayout());
@@ -510,13 +504,13 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
     /**
      * GridBagLayout 辅助：添加一行（标签 + 控件）。
      *
-     * <p><b>关键约定</b>：每行都新建独立的 {@link GridBagConstraints} 实例并显式传入行号。
+     * 关键约定：每行都新建独立的 GridBagConstraints 实例并显式传入行号。
      * 实测共享同一个约束对象、在 add 之后修改 gridy 会让多行塌陷到同一位置（文字互相覆盖），
-     * 因此这里不做任何跨行复用。</p>
+     * 因此这里不做任何跨行复用。
      *
-     * <p>标签通过 {@link I18n#label(String)} 创建：内部订阅语言切换事件，
-     * 切语言时自动 setText 新文案。调用方传 i18n key 即可，<b>不要</b>传
-     * {@code I18n.get().t("...")} 的结果——那样只翻译一次，刷新不到。</p>
+     * 标签通过 I18n.label(String) 创建：内部订阅语言切换事件，
+     * 切语言时自动 setText 新文案。调用方传 i18n key 即可，不要传
+     * {@code I18n.get().t("...")} 的结果——那样只翻译一次，刷新不到。
      */
     private static void addRow(JPanel panel, int gridy, String labelKey, JComponent field) {
         GridBagConstraints c = new GridBagConstraints();
@@ -532,11 +526,11 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
     // ========== 下拉 / 表单同步 ==========
 
     /**
-     * 重新填充下拉列表条目：真实配置按名称自然顺序（{@link #NAME_NATURAL_ORDER}）
+     * 重新填充下拉列表条目：真实配置按名称自然顺序（NAME_NATURAL_ORDER）
      * 排列，最后追加占位项 {@code addNewLabel}；把当前激活项设为选中。
      *
-     * <p>设置 selectedItem 前后临时摘掉监听器，避免触发 {@link #onDropdownChanged}
-     * 递归回调——特别是在我们刚 addAndSwitchTo 后刷新下拉时。</p>
+     * 设置 selectedItem 前后临时摘掉监听器，避免触发 onDropdownChanged
+     * 递归回调——特别是在我们刚 addAndSwitchTo 后刷新下拉时。
      */
     private void refreshDropdown() {
         refreshingDropdown = true;
@@ -564,7 +558,7 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
         deleteServiceButton.setEnabled(!settings.configs().isEmpty());
     }
 
-    /** 中文拼音序的 {@link Collator}（PRIMARY 强度：忽略大小写，仅按拼音排序）。 */
+    /** 中文拼音序的 Collator（PRIMARY 强度：忽略大小写，仅按拼音排序）。 */
     private static final Collator NAME_COLLATOR = createNameCollator();
 
     private static Collator createNameCollator() {
@@ -575,17 +569,15 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
 
     /**
      * AI 服务配置名的自然顺序比较器（仅用于下拉列表的展示排序，
-     * 不改变 {@link Settings#configs()} 的存储顺序）：
-     * <ul>
-     *   <li>文本片段用中文感知的拼音序比较（{@link Collator} + {@link Locale#CHINA}，
-     *       PRIMARY 强度，即大小写不敏感）；</li>
-     *   <li>连续数字片段按数值比较——"新配置 2" 排在 "新配置 10" 之前，
-     *       前导零（"配置 02" vs "配置 2"）视为相同；</li>
-     *   <li>同前缀时短字符串排在前面（"配置" &lt; "配置 1"）。</li>
-     * </ul>
+     * 不改变 Settings.configs() 的存储顺序）：
+     *   文本片段用中文感知的拼音序比较（Collator + Locale.CHINA，
+     *       PRIMARY 强度，即大小写不敏感）；
+     *   连续数字片段按数值比较——"新配置 2" 排在 "新配置 10" 之前，
+     *       前导零（"配置 02" vs "配置 2"）视为相同；
+     *   同前缀时短字符串排在前面（"配置" &lt; "配置 1"）。
      *
-     * <p>线程约定：{@link Collator} 非线程安全，本比较器只在 Swing EDT 上
-     * （{@link #refreshDropdown}）使用，与其余 Swing 组件一致。</p>
+     * 线程约定：Collator 非线程安全，本比较器只在 Swing EDT 上
+     * （refreshDropdown）使用，与其余 Swing 组件一致。
      */
     static final Comparator<String> NAME_NATURAL_ORDER = (a, b) -> {
         int i = 0;
@@ -643,8 +635,8 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
     /**
      * 用当前激活项的字段回填表单（下拉切换 / 增删 / 初始化时调用）。
      *
-     * <p>列表为空（{@link Settings#activeConfig()} 返回 null）时清空所有字段，
-     * 让用户看到一份空白表单，提示"应该去下拉里加一条"。</p>
+     * 列表为空（Settings.activeConfig() 返回 null）时清空所有字段，
+     * 让用户看到一份空白表单，提示"应该去下拉里加一条"。
      */
     private void populateFormFromActive() {
         AiConfig active = settings.activeConfig();
@@ -682,17 +674,15 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
 
     /**
      * 下拉列表选中项变化：分两种情况——
-     * <ul>
-     *   <li>选中了占位项 {@code addNewLabel}：立即在列表里追加一条全空配置并切过去；
-     *       下拉刷新后新配置被选中，占位项继续保持在末位；</li>
-     *   <li>选中了真实配置：先把当前表单"未保存"的编辑通过 {@link #serviceDebounce}
-     *       的 {@link DebouncedAction#flushIfPending flushIfPending} 同步落进
-     *       {@link Settings#activeConfig()}（避免切走时丢失防抖窗口内的编辑），
-     *       再切换激活项、回填表单、保存到磁盘。</li>
-     * </ul>
+     *   选中了占位项 {@code addNewLabel}：立即在列表里追加一条全空配置并切过去；
+     *       下拉刷新后新配置被选中，占位项继续保持在末位；
+     *   选中了真实配置：先把当前表单"未保存"的编辑通过 serviceDebounce
+     *       的  DebouncedAction#flushIfPending flushIfPending 同步落进
+     *       Settings.activeConfig()（避免切走时丢失防抖窗口内的编辑），
+     *       再切换激活项、回填表单、保存到磁盘。
      *
-     * <p>切换 / 新增前先调 {@link #cancelInflightTest} 中断正在飞的"上一个模型的
-     * 测试连接"。</p>
+     * 切换 / 新增前先调 cancelInflightTest 中断正在飞的"上一个模型的
+     * 测试连接"。
      */
     private void onDropdownChanged() {
         // 防御性拦截：refreshDropdown 批量改 items 期间即便 listener 没摘掉
@@ -733,12 +723,12 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
      * AI 服务区表单字段的"自动保存"统一入口：校验 → 整体替换 activeConfig →
      * 持久化。所有 UI 写操作都走这条路径,避免多字段非原子写引发的撕裂读。
      *
-     * <p>校验失败时弹 Toast 并保留旧 settings 状态，不阻断 UI;{@link DebouncedAction}
-     * 防抖保证 Toast 不会密集连发。</p>
+     * 校验失败时弹 Toast 并保留旧 settings 状态，不阻断 UI;DebouncedAction
+     * 防抖保证 Toast 不会密集连发。
      *
-     * <p>不刷新下拉 / 表单 —— 由调用方负责:下拉切换场景不需要刷新
-     * ({@link #onDropdownChanged} 会做),自动保存进入阶段只在重命名时补刷
-     * ({@link #applyAiServiceChange})。</p>
+     * 不刷新下拉 / 表单 —— 由调用方负责:下拉切换场景不需要刷新
+     * (onDropdownChanged 会做),自动保存进入阶段只在重命名时补刷
+     * (applyAiServiceChange)。
      *
      * @return 表单合法且已应用到 settings + 持久化时返回 true;校验失败或持久化
      *         异常时返回 false(settings 不变)。
@@ -791,11 +781,11 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
     }
 
     /**
-     * 把当前表单字段打包为一个新 {@link AiConfig}（一次性确定所有字段，无中间可见态）。
+     * 把当前表单字段打包为一个新 AiConfig（一次性确定所有字段，无中间可见态）。
      *
-     * <p>专供 {@link #tryApplyFormToSettings} 使用：必须<b>不要</b>直接修改
+     * 专供 tryApplyFormToSettings 使用：必须不要直接修改
      * {@code settings.activeConfig()} 的内部字段——那样会产生多字段非原子写，
-     * 跨线程读会出现"新 baseUrl + 旧 model"等撕裂读，导致被动分析请求被发到错误 AI。</p>
+     * 跨线程读会出现"新 baseUrl + 旧 model"等撕裂读，导致被动分析请求被发到错误 AI。
      */
     private AiConfig buildAiConfigFromForm(String name) {
         char[] keyChars = trimCopy(apiKeyField.getPassword());
@@ -815,13 +805,13 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
 
     /**
      * 给 AI 服务区表单的所有控件挂"自动保存"监听器：四个文本字段
-     * （name / baseUrl / apiKey / model）用 {@link DocumentListener}，两个
-     * {@link JSpinner}（timeout / maxTokens）用 {@link ChangeListener}。任一变化
-     * 都通过 {@link #serviceDebounce} 重启定时器，停止输入
-     * {@value #SERVICE_DEBOUNCE_MS}ms 后由 {@link #applyAiServiceChange} 统一处理。
+     * （name / baseUrl / apiKey / model）用 DocumentListener，两个
+     * JSpinner（timeout / maxTokens）用 ChangeListener。任一变化
+     * 都通过 serviceDebounce 重启定时器，停止输入
+     * {@value #SERVICE_DEBOUNCE_MS}ms 后由 applyAiServiceChange 统一处理。
      *
-     * <p>必须先于本方法在初始化表单之后再调——构造期 setText 会触发 DocumentListener，
-     * 若监听器已挂，会在初始化阶段产生"无意义的自动保存"流。</p>
+     * 必须先于本方法在初始化表单之后再调——构造期 setText 会触发 DocumentListener，
+     * 若监听器已挂，会在初始化阶段产生"无意义的自动保存"流。
      */
     private void wireAiServiceListeners() {
         DocumentListener docListener = new DocumentListener() {
@@ -850,17 +840,17 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
     }
 
     /**
-     * {@link #serviceDebounce} 防抖定时器到期时调用：尝试把表单应用到
+     * serviceDebounce 防抖定时器到期时调用：尝试把表单应用到
      * settings + 持久化,成功后清除"被动分析失败"提示;仅在名字变化(且下拉未打开)
-     * 时 {@link #refreshDropdown 重建下拉}。
+     * 时  #refreshDropdown 重建下拉。
      *
-     * <p>不做 {@link #populateFormFromActive 表单回填}:表单是数据源,自动保存
+     * 不做  #populateFormFromActive 表单回填:表单是数据源,自动保存
      * 后已与 activeConfig 一致;setText 会触发 DocumentListener 重启定时器,
-     * 形成"setText → 重 schedule → 再 apply → 再 setText"的死循环。</p>
+     * 形成"setText → 重 schedule → 再 apply → 再 setText"的死循环。
      *
-     * <p>下拉打开时跳过重建:removeAllItems 期间 selectedIndex 被重设,
-     * 鼠标物理位置不变但高亮条目已跳。下拉关闭后由 {@link #onDropdownChanged} /
-     * 新增删除 / 语言切换兜住展示。</p>
+     * 下拉打开时跳过重建:removeAllItems 期间 selectedIndex 被重设,
+     * 鼠标物理位置不变但高亮条目已跳。下拉关闭后由 onDropdownChanged /
+     * 新增删除 / 语言切换兜住展示。
      */
     private void applyAiServiceChange() {
         String oldName = settings.activeName();
@@ -895,8 +885,8 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
 
     /**
      * 返回 {@code source} 去掉首尾空白字符后的副本（不修改原数组）。
-     * 用于 {@link #applyFormToConfig} 与 {@link #buildAiConfigFromForm}：
-     * 把 {@link javax.swing.JPasswordField#getPassword()} 返回的 char[] 去前后空白后
+     * 用于 applyFormToConfig 与 buildAiConfigFromForm：
+     * 把 javax.swing.JPasswordField.getPassword() 返回的 char[] 去前后空白后
      * 再写入 AiConfig，行为等价于原 String.trim()。
      */
     private static char[] trimCopy(char[] source) {
@@ -920,9 +910,9 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
     /**
      * 选中下拉末位占位项"新增配置"时触发：往列表里追加一条全空配置，立刻切过去。
      *
-     * <p>新条目名称用 {@link #generateUniqueName} 生成（"新配置 1"、"新配置 2"…），
+     * 新条目名称用 generateUniqueName 生成（"新配置 1"、"新配置 2"…），
      * 避免与现有条目冲突；下拉刷新后新配置被选中，{@code addNewLabel}
-     * 占位项继续保持在末位等待下一次新增。</p>
+     * 占位项继续保持在末位等待下一次新增。
      */
     private void addNewService() {
         AiConfig fresh = new AiConfig(generateUniqueName(), "", "", "", 60, AiConfig.DEFAULT_MAX_TOKENS);
@@ -976,22 +966,22 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
     /**
      * 用当前表单值测试一次真实连接（SwingWorker 后台执行）。
      *
-     * <p>基于表单值构造临时配置，测试失败不污染已保存配置。
-     * 测试期间先显示常驻"正在测试连接…"提示（{@link Toast#showPersistent}），
+     * 基于表单值构造临时配置，测试失败不污染已保存配置。
+     * 测试期间先显示常驻"正在测试连接…"提示（Toast.showPersistent），
      * 让用户在整个等待期间都看得到状态；出结果后由 {@code show} 替换内容
-     * （成功 / 失败 / 异常三条路径都会执行到）。</p>
+     * （成功 / 失败 / 异常三条路径都会执行到）。
      *
-     * <p>用 {@link AiClient#completeAsync} 拿可取消句柄而不是直接 {@code complete}：
+     * 用 AiClient.completeAsync 拿可取消句柄而不是直接 {@code complete}：
      * 后者内部 {@code await()} 阻塞 SwingWorker 线程、外部无法中断；持有
-     * {@link CancellableAiCall} 后下拉切换 / 关闭面板可通过
-     * {@link #cancelInflightTest} 立即中断 HTTP。{@link SwingWorker#done} 用
-     * {@link #testGeneration} 代次判断本次结果是否仍有效——已被新一次测试 / 主动取消
-     * 覆盖的旧测试若延迟到达，直接 return 不动 UI。</p>
+     * CancellableAiCall 后下拉切换 / 关闭面板可通过
+     * cancelInflightTest 立即中断 HTTP。SwingWorker.done 用
+     * testGeneration 代次判断本次结果是否仍有效——已被新一次测试 / 主动取消
+     * 覆盖的旧测试若延迟到达，直接 return 不动 UI。
      *
-     * <p>附带：测试成功时清除 {@link PassiveAnalysisErrorBus} 上的错误——用户主动验证
+     * 附带：测试成功时清除 PassiveAnalysisErrorBus 上的错误——用户主动验证
      * 通过代表配置正确，应同步把"被动分析失败"的红字提示和"设置"页签感叹号一并清除。
-     * 测试失败时<b>不</b>主动设置错误——避免测试连接（用户主动验证）覆盖被动分析
-     * 的真实错误状态（用户可能想看被动分析那条 URL 的具体错误）。</p>
+     * 测试失败时不主动设置错误——避免测试连接（用户主动验证）覆盖被动分析
+     * 的真实错误状态（用户可能想看被动分析那条 URL 的具体错误）。
      */
     private void testConnection() {
         cancelInflightTest();
@@ -1066,8 +1056,8 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
     }
 
     /**
-     * 取消当前正在跑的"测试连接"（如有）。{@link CancellableAiCall#cancel()} 中断进行中的 HTTP；
-     * 递增 {@link #testGeneration} 让仍在飞的 {@link SwingWorker#done} 判定为陈旧；
+     * 取消当前正在跑的"测试连接"（如有）。CancellableAiCall.cancel() 中断进行中的 HTTP；
+     * 递增 testGeneration 让仍在飞的 SwingWorker.done 判定为陈旧；
      * 恢复按钮可用（陈旧 done() 直接 return 不会恢复按钮）；隐藏常驻"正在测试连接…"提示。
      * 幂等：无 inflight 时直接返回。
      */
@@ -1083,7 +1073,7 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
     }
 
     /**
-     * 为"测试连接"构造一个临时 {@link Settings}：保留主设置里的 customPrompt，
+     * 为"测试连接"构造一个临时 Settings：保留主设置里的 customPrompt，
      * 但 activeConfig 用表单值临时构造（不影响持久化的配置列表）。
      */
     private Settings buildTestSettings(AiConfig tempActive) {
@@ -1127,17 +1117,15 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
     // ========== 语言切换区 ==========
 
     /** 两个语言按钮:点击立刻调 I18n.set(...),所有注册过 onChange 的 UI 都会刷新。
-     *  文本走 {@link I18n#button} 工厂(自动订阅,切语言时 setText),高亮态由
-     *  {@link #refreshI18n()} 单独按当前语言切换。 */
+     *  文本走 I18n.button 工厂(自动订阅,切语言时 setText),高亮态由
+     *  refreshI18n() 单独按当前语言切换。 */
     private final JButton langZhButton = I18n.button("ui.lang.zh");
     private final JButton langEnButton = I18n.button("ui.lang.en");
 
     /**
      * 构建"语言"标题区:放置在"提示词"区下面作为最后一个模块。
-     * <pre>
      *   语言:
      *   [ 中文 ]  [ English ]   &lt;-- 当前语言高亮(蓝字加粗)
-     * </pre>
      */
     private JPanel buildLanguageSection() {
         JPanel panel = new JPanel(new BorderLayout());
@@ -1160,7 +1148,7 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
 
     /**
      * 语言按钮统一样式:无填充、无边框、纯文字外观;高亮态由
-     * {@link #refreshI18n()} 按当前 I18n.current() 切换。
+     * refreshI18n() 按当前 I18n.current() 切换。
      */
     private static void styleLangButton(JButton btn) {
         btn.setFocusPainted(false);
@@ -1177,25 +1165,23 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
 
     /**
      * 构建"被动分析"标题区：
-     * <pre>
      *   被动分析:
      *   [x] 启用被动流量分析
      *   URL 过滤正则: [____________________]
      *   全流程自动完成：实时监听 Proxy，按 URL 过滤+指纹去重后调用 AI 分析报文。
      *   ⚠ 错误信息（红字，仅错误时显示）   &lt;-- 新增：错误时显示
-     * </pre>
      *
-     * <p>开启后 AuditAI 会监听 Burp Proxy 转发到本进程的请求/响应（不影响 Repeater /
+     * 开启后 AuditAI 会监听 Burp Proxy 转发到本进程的请求/响应（不影响 Repeater /
      * Intruder / Scanner 等主动工具流量），按"URL 过滤 + 指纹去重"自动提交到独立线程池
      * 做 AI 分析。指纹 = HTTP方法 + URL(含query) + 请求体 Hash；同一指纹只分析一次，
-     * 队列满时丢弃并写告警日志，不会回压到 Burp 代理线程。</p>
+     * 队列满时丢弃并写告警日志，不会回压到 Burp 代理线程。
      *
-     * <p>无"保存"按钮：复选框 / 输入框变化时立即持久化 + 推给 handler（即时生效）。</p>
+     * 无"保存"按钮：复选框 / 输入框变化时立即持久化 + 推给 handler（即时生效）。
      *
-     * <p>错误提示：默认隐藏；订阅 {@link PassiveAnalysisErrorBus}，AI 调用失败时
+     * 错误提示：默认隐藏；订阅 PassiveAnalysisErrorBus，AI 调用失败时
      * 立刻在下方展示红字错误（短消息 + ⚠ 警示图标），用户改完配置后下次分析成功
      * 会自动消失。配合 MainTab 在"设置"页签标题右侧加感叹号，停留在其他页签时
-     * 也能感知问题。</p>
+     * 也能感知问题。
      */
     private JPanel buildPassiveAnalysisSection() {
         JPanel panel = new JPanel(new BorderLayout());
@@ -1297,10 +1283,10 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
     /**
      * 把 settings 里的被动分析配置回填到开关 + 正则输入框。
      *
-     * <p>必须先于 {@link #wirePassiveAnalysisListeners} 调用——否则 populate 时
-     * 也会触发 ChangeListener / DocumentListener 引起无意义的"自动保存"流。</p>
+     * 必须先于 wirePassiveAnalysisListeners 调用——否则 populate 时
+     * 也会触发 ChangeListener / DocumentListener 引起无意义的"自动保存"流。
      *
-     * <p>同时刷新校验状态行：用户切换 UI 语言后第一次回到该面板就能看到本地化后的状态文案。</p>
+     * 同时刷新校验状态行：用户切换 UI 语言后第一次回到该面板就能看到本地化后的状态文案。
      */
     private void populatePassiveAnalysisFromSettings() {
         passiveEnabledCheck.setSelected(settings.isPassiveAnalysisEnabled());
@@ -1310,26 +1296,24 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
     }
 
     /**
-     * 给被动分析的两个控件挂"实时生效"监听器：复选框用 {@link ChangeListener}，
-     * 输入框用 {@link DocumentListener}。任何变化都重启 {@link #passiveDebounceTimer}，
+     * 给被动分析的两个控件挂"实时生效"监听器：复选框用 ChangeListener，
+     * 输入框用 DocumentListener。任何变化都重启 passiveDebounceTimer，
      * 停止输入 {@value #PASSIVE_DEBOUNCE_MS}ms 后才统一应用（写 settings + 持久化 + 广播 hook）。
      *
-     * <p>正则输入框的 DocumentListener <b>额外立即</b>调用 {@link #refreshPassiveRegexStatus}
+     * 正则输入框的 DocumentListener 额外立即调用 refreshPassiveRegexStatus
      * ——校验反馈不参与防抖（用户键入应立刻看见状态行变色），只有"apply to settings + 持久化"
      * 走 300ms 防抖；这样既保证状态行实时、又不会出现"打一个字就触发一次 Preferences 写"的
-     * 性能 / 日志问题。</p>
+     * 性能 / 日志问题。
      *
-     * <p>实现要点：</p>
-     * <ul>
-     *   <li><b>输入框防抖</b>：DocumentListener 触发频率 = 每次按键，不防抖会把
+     * 实现要点：
+     *   输入框防抖：DocumentListener 触发频率 = 每次按键，不防抖会把
      *       中间正则态实时推给 handler——非法中间态（如未闭合括号）会触发"回退匹配全部"，
      *       把本不该匹配的请求 mark 进 dedup，用户补全正则后这些请求永不分析（去重污染）；
      *       同时每次按键 2 次 Preferences 写 + 1 条 Output 日志（注册表写 + 刷屏）。
-     *       防抖后只在停止输入时应用一次；</li>
-     *   <li>不在每次变化时弹 Toast——用户改一个字就弹一条会把 UI 顶得很难看；</li>
-     *   <li>hook 抛异常时只打日志不打扰用户——handler 重建 {@code UrlRegexFilter}
-     *       失败（非法正则）已经会写告警日志。</li>
-     * </ul>
+     *       防抖后只在停止输入时应用一次；
+     *   不在每次变化时弹 Toast——用户改一个字就弹一条会把 UI 顶得很难看；
+     *   hook 抛异常时只打日志不打扰用户——handler 重建 {@code UrlRegexFilter}
+     *       失败（非法正则）已经会写告警日志。
      */
     private void wirePassiveAnalysisListeners() {
         passiveEnabledCheck.addChangeListener(e -> passiveDebounce.schedule());
@@ -1355,14 +1339,14 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
     }
 
     /**
-     * 根据 {@link #passiveRegexField} 当前文本重新填充状态行：EMPTY 留空匹配全部、
+     * 根据 passiveRegexField 当前文本重新填充状态行：EMPTY 留空匹配全部、
      * VALID 绿字"合法"、VALID_EXPANDED 绿字"含伪正则展开（原 → 译）"、INVALID 红字"非法"。
      *
-     * <p>不防抖、不抛 Toast：校验是 UI 反馈，应当和键入同步；只有
-     * "apply to settings + 持久化"才走防抖（避免半截输入落盘）。</p>
+     * 不防抖、不抛 Toast：校验是 UI 反馈，应当和键入同步；只有
+     * "apply to settings + 持久化"才走防抖（避免半截输入落盘）。
      *
-     * <p>状态行的颜色用系统提供的语义色：禁用灰 / 成功色 / 错误色——跟随 LaF / Dark 主题。
-     * 主题未提供对应键时回退到固定颜色，避免 UI 完全不可读。</p>
+     * 状态行的颜色用系统提供的语义色：禁用灰 / 成功色 / 错误色——跟随 LaF / Dark 主题。
+     * 主题未提供对应键时回退到固定颜色，避免 UI 完全不可读。
      */
     private void refreshPassiveRegexStatus() {
         String text = passiveRegexField.getText();
@@ -1440,16 +1424,14 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
 
     /**
      * 语言切换时刷新设置页签内的非自动订阅 UI 元素:
-     * <ul>
-     *   <li>{@code addNewLabel}（下拉占位符）+ 整条下拉（按最新翻译重排条目）；</li>
-     *   <li>语言按钮的高亮态（按当前语言切换"加粗蓝字 / 平铺灰字"）；</li>
-     *   <li>默认提示词（框内为"参考默认"且无自定义时）跟随语言重填。</li>
-     * </ul>
-     * 其它按钮 / 复选框 / Label / TitledBorder / tooltip 由 {@link I18n} 弱引用
+     *   {@code addNewLabel}（下拉占位符）+ 整条下拉（按最新翻译重排条目）；
+     *   语言按钮的高亮态（按当前语言切换"加粗蓝字 / 平铺灰字"）；
+     *   默认提示词（框内为"参考默认"且无自定义时）跟随语言重填。
+     * 其它按钮 / 复选框 / Label / TitledBorder / tooltip 由 I18n 弱引用
      * 订阅自动刷新,这里不再手动 setText。
      *
-     * <p>TitledBorder 创建时已写死,重建主 panel 代价大,这里不重画——视觉上仅是
-     * 辅助标题,切语言时用户通常也会离开设置页一会儿,体验上不构成问题。</p>
+     * TitledBorder 创建时已写死,重建主 panel 代价大,这里不重画——视觉上仅是
+     * 辅助标题,切语言时用户通常也会离开设置页一会儿,体验上不构成问题。
      */
     @Override
     public void refreshI18n() {
@@ -1522,11 +1504,11 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
      * 注册"被动分析错误状态变化"的回调：让 {@code MainTab} 在"设置"页签标题右侧
      * 展示 / 清除感叹号，让用户停留在其他页签时也能感知到被动分析失败。
      *
-     * <p>回调在 EDT 上触发，签名 {@code boolean hasError}——
-     * true 时外部应在页签标题加警示（如"设置 ⚠"），false 时恢复原标题。</p>
+     * 回调在 EDT 上触发，签名 {@code boolean hasError}——
+     * true 时外部应在页签标题加警示（如"设置 ⚠"），false 时恢复原标题。
      *
-     * <p>注册后<b>不会</b>立即触发一次回调——调用方如需当前状态请自行
-     * 读取 {@link #isPassiveAnalysisInError()}。</p>
+     * 注册后不会立即触发一次回调——调用方如需当前状态请自行
+     * 读取 isPassiveAnalysisInError()。
      *
      * @param hook 回调；为 null 表示清空（不通知）。
      */
@@ -1545,10 +1527,10 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
     /**
      * 错误总线回调：把当前错误状态映射到"红字标签"和"页签感叹号"两个 UI 副作用。
      *
-     * <p>调用线程：任意。监听器在错误总线里<b>同步</b>触发——可能来自被动分析线程
+     * 调用线程：任意。监听器在错误总线里同步触发——可能来自被动分析线程
      * （{@code PassiveAnalyzer} 回调）。Singer-related 操作必须在 EDT，本方法内
-     * 统一用 {@link SwingUtilities#invokeLater} 切到 EDT 后再操作 Swing 组件。
-     * </p>
+     * 统一用 SwingUtilities.invokeLater 切到 EDT 后再操作 Swing 组件。
+ *
      */
     private void onPassiveErrorChanged() {
         PassiveAnalysisErrorBus.ErrorInfo info = PassiveAnalysisErrorBus.INSTANCE.getError();
@@ -1559,12 +1541,12 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
     /**
      * EDT 上把错误状态应用到 UI：JTextArea 文本 + 通知外部（MainTab）更新页签。
      *
-     * <p>不切换 panel 可见性（始终占布局位置），用 {@code passiveErrorArea} 文本
-     * 内容控制显示：有错误时填充红字 + Unicode 警示符；无错误时设为单个空格占位。</p>
+     * 不切换 panel 可见性（始终占布局位置），用 {@code passiveErrorArea} 文本
+     * 内容控制显示：有错误时填充红字 + Unicode 警示符；无错误时设为单个空格占位。
      *
-     * <p>用纯文本 + Unicode 字符（⚠）而非 HTML 渲染：避免某些 LaF / Dark 主题下
-     * JLabel 的 HTML 渲染失效、直接显示 {@code <html>} 字面字符。{@link JTextArea}
-     * 是纯文本组件，输出什么就显示什么。</p>
+     * 用纯文本 + Unicode 字符（⚠）而非 HTML 渲染：避免某些 LaF / Dark 主题下
+     * JLabel 的 HTML 渲染失效、直接显示 {@code <html>} 字面字符。JTextArea
+     * 是纯文本组件，输出什么就显示什么。
      *
      * @param info     当前错误快照（可能为 cleared()）。
      * @param hasError 是否有错误。
@@ -1618,8 +1600,8 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
     /**
      * 把诊断信息写入 Burp Extender。
      *
-     * <p>{@code api} 为 null 时（仅测试场景）<b>直接抛 RuntimeException 让测试 fail-fast</b>，
-     * 而不是静默吞掉或降级到 stderr——避免"hook 抛异常但测试仍然通过"的假绿。</p>
+     * {@code api} 为 null 时（仅测试场景）直接抛 RuntimeException 让测试 fail-fast，
+     * 而不是静默吞掉或降级到 stderr——避免"hook 抛异常但测试仍然通过"的假绿。
      */
     private void logError(String message, Throwable t) {
         if (api != null) {
@@ -1632,15 +1614,15 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
     // ========== 防抖辅助类 ==========
 
     /**
-     * 把"延迟 N ms 后执行"的逻辑收敛到一个对象里：内部持有 {@link javax.swing.Timer}，
-     * 提供 {@link #schedule 重启} / {@link #flushIfPending 立即触发挂起任务} /
-     * {@link #stop 永久停止} 三种语义。
+     * 把"延迟 N ms 后执行"的逻辑收敛到一个对象里：内部持有 javax.swing.Timer，
+     * 提供  #schedule 重启 /  #flushIfPending 立即触发挂起任务 /
+     *  #stop 永久停止 三种语义。
      *
-     * <p>用于表单字段防抖：每次键入都 {@code schedule()}，停止输入 N ms 后才真正执行;
-     * 切换激活项 / 卸载面板时调 {@code flushIfPending()} 强行同步执行未挂起的任务。</p>
+     * 用于表单字段防抖：每次键入都 {@code schedule()}，停止输入 N ms 后才真正执行;
+     * 切换激活项 / 卸载面板时调 {@code flushIfPending()} 强行同步执行未挂起的任务。
      *
-     * <p><b>线程约定</b>：所有方法(含构造方法)只能在 EDT 上调用。
-     * Timer 的 listener 由 Swing 在 EDT 上触发。</p>
+     * 线程约定：所有方法(含构造方法)只能在 EDT 上调用。
+     * Timer 的 listener 由 Swing 在 EDT 上触发。
      */
     private static final class DebouncedAction implements java.awt.event.ActionListener {
         private final Runnable action;
@@ -1670,7 +1652,7 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
          * 下拉切换前把"切走前最后几次键入"同步落进旧激活项;
          * 面板卸载 / 关闭前确保挂起任务先执行完。
          *
-         * <p>同步在 EDT 上执行 action:调用方需保证 action 自身是 EDT 安全且无重入。</p>
+         * 同步在 EDT 上执行 action:调用方需保证 action 自身是 EDT 安全且无重入。
          */
         void flushIfPending() {
             if (timer.isRunning()) {
@@ -1679,7 +1661,7 @@ public final class SettingsPanel extends JPanel implements LocaleAware {
             }
         }
 
-        /** 永久停止定时器(面板卸载 / 关闭)。不会执行挂起任务——配合 {@link #flushIfPending} 使用。 */
+        /** 永久停止定时器(面板卸载 / 关闭)。不会执行挂起任务——配合 flushIfPending 使用。 */
         void stop() {
             timer.stop();
         }

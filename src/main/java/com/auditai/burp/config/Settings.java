@@ -10,11 +10,11 @@ import java.util.Set;
 /**
  * 完整设置：所有 AI 服务配置 + 当前激活项 + 全局自定义系统提示词 + 被动分析配置。
  *
- * <p>当前激活项用一份独立的 {@link #activeConfig} 引用持有，切换时整体替换引用
- * （构造新 {@link AiConfig} 一次性发布）——下游组件读到的是"全旧"或"全新"的完整对象，
- * 不会出现"新 baseUrl + 旧 model"的撕裂读。</p>
+ * 当前激活项用一份独立的 activeConfig 引用持有，切换时整体替换引用
+ * （构造新 AiConfig 一次性发布）——下游组件读到的是"全旧"或"全新"的完整对象，
+ * 不会出现"新 baseUrl + 旧 model"的撕裂读。
  *
- * <p>列表可以为空（首次安装 / 用户清空）；配置名不能重名（UI 侧新增按钮保证）。</p>
+ * 列表可以为空（首次安装 / 用户清空）；配置名不能重名（UI 侧新增按钮保证）。
  */
 public final class Settings {
 
@@ -73,8 +73,8 @@ public final class Settings {
      * 切换 / 保存 / 重命名 / 删除时唯一入口：构造新 AiConfig 替换 activeConfig 引用。
      * AiConfig 字段非 volatile，必须"整体替换"才不会出现半新半旧。
      *
-     * <p>两次独立 volatile 写（先 config 后 name）——目前没有同时读两者的跨线程路径，
-     * 顺序保留；未来需要可收敛成不可变快照对象。</p>
+     * 两次独立 volatile 写（先 config 后 name）——目前没有同时读两者的跨线程路径，
+     * 顺序保留；未来需要可收敛成不可变快照对象。
      *
      * @param source 数据源（列表条目或临时构造的新 AiConfig）；null 时清空激活项。
      */
@@ -181,7 +181,7 @@ public final class Settings {
 
     /**
      * 按名移除列表条目（不改 activeConfig / activeName）。
-     * 配合 {@link #replaceActive} 使用——改名后旧名条目不再被引用，需显式移除，
+     * 配合 replaceActive 使用——改名后旧名条目不再被引用，需显式移除，
      * 否则下拉列表会残留"幽灵配置"。
      *
      * @param name 要移除的配置名；null / 空串时为 no-op。

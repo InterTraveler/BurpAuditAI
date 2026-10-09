@@ -32,20 +32,18 @@ import java.io.Serial;
 import java.util.function.Consumer;
 
 /**
- * 分析页中的<b>单个报文页签</b>（对应一次“Send to AuditAI”或一次“新建报文”）。
+ * 分析页中的单个报文页签（对应一次“Send to AuditAI”或一次“新建报文”）。
  *
- * <p>布局与配色尽量贴近 Burp 的 Repeater：</p>
- * <ul>
- *   <li><b>Analyze / Cancel</b> 两个按钮位于<b>左侧</b>（请求编辑区上方，左对齐），
- *       Analyze 为<b>橙色</b>（白字、无边框）、Cancel 为<b>白色</b>（深灰字、细灰边框），
- *       圆角小按钮，与 Repeater 的 Send / Cancel 风格一致；</li>
- *   <li>编辑区标题使用英文 <b>Request / Response</b>，结果区标题为 <b>Result</b>；</li>
- *   <li>请求/响应编辑器为 Burp 原生组件，与 Repeater/Proxy 外观一致。</li>
- * </ul>
+ * 布局与配色尽量贴近 Burp 的 Repeater：
+ *   Analyze / Cancel 两个按钮位于左侧（请求编辑区上方，左对齐），
+ *       Analyze 为橙色（白字、无边框）、Cancel 为白色（深灰字、细灰边框），
+ *       圆角小按钮，与 Repeater 的 Send / Cancel 风格一致；
+ *   编辑区标题使用英文 Request / Response，结果区标题为 Result；
+ *   请求/响应编辑器为 Burp 原生组件，与 Repeater/Proxy 外观一致。
  *
- * <p>取消逻辑：Analyze 提交后本页签持有该任务的 {@link AnalysisTask} 句柄，
- * 点 Cancel 只中断<b>本页签</b>正在进行的分析（排队中直接放弃、执行中中断 HTTP 请求），
- * 不影响其他页签。</p>
+ * 取消逻辑：Analyze 提交后本页签持有该任务的 AnalysisTask 句柄，
+ * 点 Cancel 只中断本页签正在进行的分析（排队中直接放弃、执行中中断 HTTP 请求），
+ * 不影响其他页签。
  */
 public final class MessageTab extends JPanel implements LocaleAware {
 
@@ -91,21 +89,21 @@ public final class MessageTab extends JPanel implements LocaleAware {
     private AnalysisTask currentTask;
 
     /**
-     * 分析代次：每次 {@link #startAnalysis()} / {@link #cancelAnalysis()} / {@link #close()}
+     * 分析代次：每次 startAnalysis() / cancelAnalysis() / close()
      * 自增；回调携带发起时的代次快照，仅当与当前代次一致才继续（更新 UI 或落库）
      * ——防止"旧任务回调晚到"覆盖新任务状态（快速 Analyze → Cancel → Analyze 场景）。
      *
-     * <p><b>volatile</b>：落库路径在分析线程上读它做代次校验（见 {@link #persistResult}），
-     * 而写发生在 EDT，需要可见性保证。</p>
+     * volatile：落库路径在分析线程上读它做代次校验（见 persistResult），
+     * 而写发生在 EDT，需要可见性保证。
      */
     private volatile long analysisToken;
 
     /**
      * 本页签的 I18n 语言切换监听器。
      *
-     * <p>页签是短生命周期组件：I18n 监听器被全局强引用持有，页签关闭时若未注销，
+     * 页签是短生命周期组件：I18n 监听器被全局强引用持有，页签关闭时若未注销，
      * 本页签连同其 Burp 原生报文编辑器会被常驻引用（内存泄漏）。因此把监听器存为字段，
-     * 在 {@link #close()} 里调用 {@link I18n#off} 注销。</p>
+     * 在 close() 里调用 I18n.off 注销。
      */
     private final Consumer<PromptBuilder.Lang> i18nListener = lang -> refreshI18n();
 
@@ -181,11 +179,11 @@ public final class MessageTab extends JPanel implements LocaleAware {
     /**
      * 用一条来自其他模块（上下文菜单）的报文填充本页签。应在 EDT 调用。
      *
-     * <p><b>响应判空策略：</b>不依赖 {@link HttpRequestResponse#hasResponse()}，
+     * 响应判空策略：不依赖 HttpRequestResponse.hasResponse()，
      * 因为 Montoya 2026.7 的 {@code hasResponse()} 只判断 response 字段非 null，
      * 而空响应对象会让它返回 true，结果编辑器显示"空白但有框架"的视觉歧义。
      * 这里直接看 {@code response} 是否为 null：null 时把响应编辑器清空到 "No response"
-     * 占位符；非 null 时正常显示。</p>
+     * 占位符；非 null 时正常显示。
      *
      * @param message 请求/响应快照；response 字段为 null 表示"没有响应"。
      */
@@ -245,15 +243,15 @@ public final class MessageTab extends JPanel implements LocaleAware {
     }
 
     /**
-     * 把一次分析结果落库（问题库 + 历史库 + audit-trail），<b>在分析线程执行</b>。
+     * 把一次分析结果落库（问题库 + 历史库 + audit-trail），在分析线程执行。
      *
-     * <p>为什么放在分析线程而不是 EDT：{@code AnalysisResultSink} 内部要 gzip 压缩、
+     * 为什么放在分析线程而不是 EDT：{@code AnalysisResultSink} 内部要 gzip 压缩、
      * 算 SHA-256、写临时文件 + 原子 move，还会重写整份索引 JSON——历史上这些都在
      * {@code SwingUtilities.invokeLater} 里跑，等于在 EDT 上做阻塞 IO（大 body 时界面卡死）。
-     * 被动分析路径本来就在分析线程落库，本路径也按此设计。</p>
+     * 被动分析路径本来就在分析线程落库，本路径也按此设计。
      *
-     * <p>代次校验与过滤：过期结果（用户已发起新分析 / 取消 / 关闭页签）和失败结果不落库，
-     * 语义与改动前保持一致。</p>
+     * 代次校验与过滤：过期结果（用户已发起新分析 / 取消 / 关闭页签）和失败结果不落库，
+     * 语义与改动前保持一致。
      */
     private void persistResult(AnalysisResult result, long token,
                                byte[] requestBytes, byte[] responseBytes) {
@@ -291,8 +289,8 @@ public final class MessageTab extends JPanel implements LocaleAware {
     /**
      * 展示分析结果（由 TrafficAnalyzer 在分析线程回调，内部切回 EDT）。
      *
-     * <p>本方法只负责界面：落库已由 {@link #persistResult} 在分析线程完成，
-     * 这里不再出现任何磁盘 IO。</p>
+     * 本方法只负责界面：落库已由 persistResult 在分析线程完成，
+     * 这里不再出现任何磁盘 IO。
      */
     private void showResult(AnalysisResult result, long token) {
         SwingUtilities.invokeLater(() -> {

@@ -16,14 +16,14 @@ import java.util.UUID;
 
 /**
  * "分析结果落库"复合接收器：把"写问题库 + 写历史库 + 失败日志 + 审计轨迹落盘"四步合并成一个回调，
- * 让 {@link AuditAiExtension} 装配时只需要构造一次、然后在手动分析与被动分析两路
+ * 让 AuditAiExtension 装配时只需要构造一次、然后在手动分析与被动分析两路
  * 共享——避免两处 lambda 复制粘贴导致日志措辞 / 失败处理漂移。
  *
- * <p>所有写库失败一律吞异常并通过 {@link MontoyaApi#logging()#logToError} 记录，
- * 不向上抛：分析主流程已结束，UI 提示已经展示，再抛异常只会污染关闭流程。</p>
+ * 所有写库失败一律吞异常并通过 MontoyaApi.logging()#logToError 记录，
+ * 不向上抛：分析主流程已结束，UI 提示已经展示，再抛异常只会污染关闭流程。
  *
- * <p>线程：被 {@code TrafficAnalyzer} / {@code PassiveAnalyzer} 在分析线程回调，
- * 与 EDT 解耦；sink 自身不触碰 Swing 组件。</p>
+ * 线程：被 {@code TrafficAnalyzer} / {@code PassiveAnalyzer} 在分析线程回调，
+ * 与 EDT 解耦；sink 自身不触碰 Swing 组件。
  */
 final class AnalysisResultSink {
 
@@ -36,7 +36,7 @@ final class AnalysisResultSink {
      * @param api          Montoya API 门面（日志输出用；不可为 null）。
      * @param findingStore 全局问题库；可为 null（创建失败等场景），为 null 时跳过 finding 写入。
      * @param historyStore "历史"页签背后的已分析历史库；可为 null，行为同上。
-     * @param trigger      触发来源（MANUAL / PASSIVE），传给 {@link AnalysisHistoryStore#add}。
+     * @param trigger      触发来源（MANUAL / PASSIVE），传给 AnalysisHistoryStore.add。
      */
     AnalysisResultSink(MontoyaApi api, FindingStore findingStore,
                        AnalysisHistoryStore historyStore, AnalysisTrigger trigger) {

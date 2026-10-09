@@ -15,9 +15,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@link PassiveAnalysisErrorBus} 单元测试：状态设置 / 清除、监听器触发、
  * 异常隔离、多次连续操作的幂等性等。
  *
- * <p>注意：{@code PassiveAnalysisErrorBus} 是进程内单例（{@link PassiveAnalysisErrorBus#INSTANCE}），
+ * 注意：{@code PassiveAnalysisErrorBus} 是进程内单例（{@link PassiveAnalysisErrorBus#INSTANCE}），
  * 每个测试方法在 {@code @BeforeEach} 中重置为 cleared 状态、在 {@code @AfterEach} 中
- * 清理监听器，避免用例间互相污染。</p>
+ * 清理监听器，避免用例间互相污染。
  */
 final class PassiveAnalysisErrorBusTest {
 

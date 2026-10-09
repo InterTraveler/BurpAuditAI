@@ -14,12 +14,12 @@ import java.util.Map;
  * multipart/form-data body 的字节级解析与重组——给 v3 协议
  * {@code replace_multipart_params} 提供"按 part name 改 value"的底层能力。
  *
- * <p><b>为什么自写、不走 Burp Montoya？</b>Montoya 的 {@link HttpRequest#parameters()}
+ * 为什么自写、不走 Burp Montoya？Montoya 的 HttpRequest.parameters()
  * 不把 multipart part 视作参数（它只识别 {@code application/x-www-form-urlencoded} 等
  * 参数化 body），multipart part 全藏在 raw body 字节里，没有现成高层 API。
- * 这是 v3 协议里唯一需要"自解析 body"的分类。</p>
+ * 这是 v3 协议里唯一需要"自解析 body"的分类。
  *
- * <p>只支持 {@code multipart/form-data}——{@code multipart/mixed} 等不在审计场景里出现。</p>
+ * 只支持 {@code multipart/form-data}——{@code multipart/mixed} 等不在审计场景里出现。
  */
 public final class MultipartBodyParser {
 
@@ -30,18 +30,18 @@ public final class MultipartBodyParser {
      * 文件 part 的 value 把字节当 UTF-8 解码（不可打印字符会乱码，但审计场景下
      * 显示给模型的简述会被截断，影响小）。
      *
-     * <p>{@code valueOffset} / {@code valueEndOffset} 是原 body 字节的偏移量
-     * ——{@link #serialize} 在重组时用它们按段"切片"原 body 字节，只替换目标 part
+     * {@code valueOffset} / {@code valueEndOffset} 是原 body 字节的偏移量
+     * ——serialize 在重组时用它们按段"切片"原 body 字节，只替换目标 part
      * 的 value，避免重新拼 part header（保留原始大小写 / 空格 / 顺序）。
-     * {@code valueOffset} 指 part <b>value</b> 字节的起点（即 header 末尾空行
+     * {@code valueOffset} 指 part value 字节的起点（即 header 末尾空行
      * {@code \r\n\r\n} 之后），{@code valueEndOffset} 指 part value 字节的终点
-     * （不含紧随其后的 {@code \r\n--BOUNDARY} 边界）。</p>
+     * （不含紧随其后的 {@code \r\n--BOUNDARY} 边界）。
      *
-     * <p><b>为什么是 value 起点而不是 header 起点</b>：{@link #serialize} 把
+     * 为什么是 value 起点而不是 header 起点：serialize 把
      * {@code body[partStart, valueOffset)} 整段原样拷出——这段天然包含
      * "boundary + {@code \r\n} + part header + 末尾空行"。若这里存成 header 起点，
      * 替换 value 时就会把 part header（含 {@code Content-Disposition}）整段丢掉，
-     * 且相邻 part 之间的 {@code \r\n} 也会被跳过。</p>
+     * 且相邻 part 之间的 {@code \r\n} 也会被跳过。
      */
     public static final class Part {
         private final String name;
@@ -202,10 +202,10 @@ public final class MultipartBodyParser {
      * 跳过最后的 terminator（{@code --BOUNDARY--}），每个 part 区间解 header（找
      * {@code \r\n\r\n} 定位 header 结束）和 value（到下一 boundary 的 {@code \r\n} 为止）。
      *
-     * <p>包级可见（而非 private）：{@link #parse(HttpRequest)} 依赖 Montoya 运行时对象工厂，
+     * 包级可见（而非 private）：parse(HttpRequest) 依赖 Montoya 运行时对象工厂，
      * 单测环境构造不出 {@code HttpRequest}；把纯字节逻辑暴露成包级入口后，
      * {@code MultipartBodyParserTest} 可以直接对"parse → serialize"做字节级回归断言
-     * ——这正是 {@code valueOffset} 语义错位曾经漏网的原因。</p>
+     * ——这正是 {@code valueOffset} 语义错位曾经漏网的原因。
      */
     static List<Part> parseBody(byte[] body, String boundary) {
         byte[] dashBoundaryBytes = ("--" + boundary).getBytes(StandardCharsets.US_ASCII);

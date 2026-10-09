@@ -24,32 +24,28 @@ import java.util.Base64;
 /**
  * API Key 加密器：AES-256-GCM + PBKDF2。
  *
- * <p>用于把 {@code AiConfig.apiKey} 在持久化到 Burp Preferences / 落盘 JSON 之前
- * 做对称加密，磁盘上不再保留明文密钥。</p>
+ * 用于把 {@code AiConfig.apiKey} 在持久化到 Burp Preferences / 落盘 JSON 之前
+ * 做对称加密，磁盘上不再保留明文密钥。
  *
- * <h2>威胁模型</h2>
- * <p>这是<strong>混淆（obfuscation）</strong>，不是完整的密钥管理：</p>
- * <ul>
- *   <li>密钥派生自 <code>user.home</code> + 固定种子 + PBKDF2，绑定"本机本用户"；
- *       拷走 Burp 的 Preferences 文件到另一台机器 / 另一用户账户下无法解密；</li>
- *   <li>同一台机器同一用户跑插件可以正常解密（用户自己不该被挡住）；</li>
- *   <li>JVM 内存里仍以 {@code char[]}（{@link AiConfig}）形式存在，理论上仍可被
+ * 威胁模型
+ * 这是混淆（obfuscation），不是完整的密钥管理：
+ *   密钥派生自 user.home + 固定种子 + PBKDF2，绑定"本机本用户"；
+ *       拷走 Burp 的 Preferences 文件到另一台机器 / 另一用户账户下无法解密；
+ *   同一台机器同一用户跑插件可以正常解密（用户自己不该被挡住）；
+ *   JVM 内存里仍以 {@code char[]}（AiConfig）形式存在，理论上仍可被
  *       本机攻击者通过 heap dump 拿到——这是 Burp 扩展架构层面的限制，完整解决
  *       需要操作系统级密钥库（Windows DPAPI / macOS Keychain / Linux Secret Service），
- *       不在本类的能力范围；</li>
- *   <li>不抗"修改 Preferences 文件塞入明文 {prefix} 假装是密文"这种主动攻击——
- *       攻击者本就可以改文件，没意义专门防护。</li>
- * </ul>
+ *       不在本类的能力范围；
+ *   不抗"修改 Preferences 文件塞入明文 {prefix} 假装是密文"这种主动攻击——
+ *       攻击者本就可以改文件，没意义专门防护。
  *
- * <h2>算法</h2>
- * <ul>
- *   <li>对称：AES-256-GCM（12 字节随机 IV、128 位 auth tag）；</li>
- *   <li>密钥派生：PBKDF2WithHmacSHA256，65536 次迭代，16 字节盐
- *       （盐 = SHA-256(<code>user.home</code> + 固定种子））；</li>
- *   <li>磁盘格式：<code>enc:v1:&lt;base64(IV || ciphertext+tag)&gt;</code>，单行可读；</li>
- *   <li>明文字段（不含 <code>enc:v1:</code> 前缀）继续可被旧版本识别——
- *       {@link #tryDecrypt(String)} 自动按需解密，老数据下次保存时自动重写成密文。</li>
- * </ul>
+ * 算法
+ *   对称：AES-256-GCM（12 字节随机 IV、128 位 auth tag）；
+ *   密钥派生：PBKDF2WithHmacSHA256，65536 次迭代，16 字节盐
+ *       （盐 = SHA-256(user.home + 固定种子））；
+ *   磁盘格式：enc:v1:&lt;base64(IV || ciphertext+tag)&gt;，单行可读；
+ *   明文字段（不含 enc:v1: 前缀）继续可被旧版本识别——
+ *       tryDecrypt(String) 自动按需解密，老数据下次保存时自动重写成密文。
  */
 public final class ApiKeyCipher {
 
@@ -86,12 +82,12 @@ public final class ApiKeyCipher {
     /**
      * 加密一段明文：返回 {@value #PREFIX} 开头的密文（单行 base64）。
      *
-     * <p>空数组 / null 视为"未设置"：返回空串，避免在磁盘上写出"密文"——空配置
-     * 没必要套一层加密壳（且加密空串在某些实现上会报参数错误）。</p>
+     * 空数组 / null 视为"未设置"：返回空串，避免在磁盘上写出"密文"——空配置
+     * 没必要套一层加密壳（且加密空串在某些实现上会报参数错误）。
      *
-     * <p><b>不修改入参</b>：内部先复制一份再处理，调用方（如
+     * 不修改入参：内部先复制一份再处理，调用方（如
      * {@code SettingsStore.save} 直接传入 {@code AiConfig.getApiKey()} 的内部数组）
-     * 的密钥不会被清零或改写。</p>
+     * 的密钥不会被清零或改写。
      *
      * @throws ApiKeyCipherException 加密失败时抛出（拒绝静默降级为明文落盘）。
      */
@@ -282,7 +278,7 @@ public final class ApiKeyCipher {
 
     /**
      * 把 JCE 一堆受检异常统一包成 RuntimeException，方便在
-     * {@link #encrypt}/{@link #decrypt} 顶层只 catch 一处。
+     * encrypt/decrypt 顶层只 catch 一处。
      */
     private static final class GeneralCryptoFailure extends RuntimeException {
 

@@ -11,9 +11,9 @@ import java.util.Objects;
 /**
  * 用户自定义技能的本地文件仓库。
  *
- * <p>扁平形态：{@code <数据根>/projects/<id>/custom-skills/<id>/SKILL.md}，
+ * 扁平形态：{@code <数据根>/projects/<id>/custom-skills/<id>/SKILL.md}，
  * 目录名即技能 id，不分 vuln/auxiliary 子层。#install 用 {@code .tmp} +
- * ATOMIC_MOVE 写入，避免半写文件被扫描到。</p>
+ * ATOMIC_MOVE 写入，避免半写文件被扫描到。
  */
 public final class CustomSkillStore {
 
@@ -48,7 +48,7 @@ public final class CustomSkillStore {
     /**
      * 把用户提供的 {@code SKILL.md} 内容落地为 {@code <root>/<id>/SKILL.md}。
      *
-     * @param id          技能 id（最终落到 <code>&lt;id&gt;</code> 子目录名）。
+     * @param id          技能 id（最终落到 &lt;id&gt; 子目录名）。
      * @param content     SKILL.md 文本（必须含 {@code ---} 边界 + {@code name} 字段）。
      * @param overrideConflict true 时与既有同 id 冲突会追加 {@code -2/-3...} 后缀；
      *                        false 时直接抛 IOException。
@@ -93,8 +93,8 @@ public final class CustomSkillStore {
     /**
      * 卸载指定 id 的用户技能：递归删除 {@code <root>/<id>/} 目录。
      *
-     * <p>仅作用于 SkillSource#USER 来源——调用方负责前置校验（内置技能不可卸载）。
-     * 若 id 对应的目录不存在（已被外部删除、并发卸载），不抛错、返回 false。</p>
+     * 仅作用于 SkillSource#USER 来源——调用方负责前置校验（内置技能不可卸载）。
+     * 若 id 对应的目录不存在（已被外部删除、并发卸载），不抛错、返回 false。
      *
      * @return true 表示本次调用实际删除了目录；false 表示目录本就不存在。
      */

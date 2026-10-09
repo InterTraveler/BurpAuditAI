@@ -26,14 +26,14 @@ import javax.swing.border.TitledBorder;
  * 国际化运行时：单例，按 key 查文案，广播语言切换事件。
  * 资源文件位于 classpath {@code i18n/messages_xx.properties}。
  *
- * <p>常用法：</p>
- * <pre>{@code
+ * 常用法：
+ * {@code
  *   I18n.get().t("ui.tab.settings");                  // 拿文案
  *   I18n.get().t("ui.toast.deleted", name);           // 带参
  *   JLabel lbl = I18n.label("ui.settings.name");      // 自动跟随语言
  *   I18n.tooltip(filterField, "ui.history.filterTip");
  *   I18n.get().onChange(lang -> refreshI18n());       // 短生命周期组件记得 off
- * }</pre>
+ * }
  */
 public final class I18n {
 

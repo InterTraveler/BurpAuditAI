@@ -5,8 +5,8 @@ import java.util.Locale;
 /**
  * 问题严重程度等级。
  *
- * <p>排序权重：{@link #rank} 越大越严重。UI 上"问题列表"按 (severity 降序, confidence 降序)
- * 展示，让最值得关注的条目排在最前面。</p>
+ * 排序权重：rank 越大越严重。UI 上"问题列表"按 (severity 降序, confidence 降序)
+ * 展示，让最值得关注的条目排在最前面。
  */
 public enum Severity {
 
@@ -35,8 +35,8 @@ public enum Severity {
     /**
      * UI 显示词在 i18n 资源里的 key。
      *
-     * <p>{@link #label} 保留中文作为数据层的规范化显示名；需要跟随界面语言时，
-     * 由 UI 层调用 {@code I18n.t(severity.displayKey())} 取词，避免枚举持有单一语言文案。</p>
+     * label 保留中文作为数据层的规范化显示名；需要跟随界面语言时，
+     * 由 UI 层调用 {@code I18n.t(severity.displayKey())} 取词，避免枚举持有单一语言文案。
      */
     public String displayKey() {
         return switch (this) {
@@ -51,7 +51,7 @@ public enum Severity {
     /**
      * 解析模型返回的严重程度字符串（大小写、空格、常见别名都尽量容错）。
      *
-     * @param text 模型原始 severity 字段；为空或无法识别时回退为 {@link #INFO}。
+     * @param text 模型原始 severity 字段；为空或无法识别时回退为 INFO。
      * @return 对应严重程度枚举，永远非 null。
      */
     public static Severity parse(String text) {

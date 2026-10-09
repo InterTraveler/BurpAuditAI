@@ -13,12 +13,12 @@ import java.io.Serial;
 /**
  * 横向流动、超出宽度自动换行的布局。
  *
- * <p>JDK 自带的 {@link FlowLayout} 只支持单行，超出后直接裁切；
- * {@link java.awt.GridLayout} 会强制拉伸每个 cell。本类在 FlowLayout 的基础上
- * 累计当前行剩余宽度，放不下时换到下一行（gap 与容器边距沿用 FlowLayout 设置）。</p>
+ * JDK 自带的 FlowLayout 只支持单行，超出后直接裁切；
+ * java.awt.GridLayout 会强制拉伸每个 cell。本类在 FlowLayout 的基础上
+ * 累计当前行剩余宽度，放不下时换到下一行（gap 与容器边距沿用 FlowLayout 设置）。
  *
- * <p>代码改自社区常见的 WrapLayout 实现（https://github.com/timthom/ WrapLayout 思路），
- * 简化到只保留 AuditAI 需要的部分。</p>
+ * 代码改自社区常见的 WrapLayout 实现（https://github.com/timthom/ WrapLayout 思路），
+ * 简化到只保留 AuditAI 需要的部分。
  */
 public final class WrapLayout extends FlowLayout {
 

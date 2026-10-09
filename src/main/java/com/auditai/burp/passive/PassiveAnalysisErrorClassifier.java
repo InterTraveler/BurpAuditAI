@@ -11,24 +11,22 @@ import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpTimeoutException;
 
 /**
- * 把 {@link AiException}（及底层网络异常）按用户可读的"下一步该检查什么"分类到
- * {@link PassiveAnalysisErrorBus.ErrorKind}。
+ * 把 AiException（及底层网络异常）按用户可读的"下一步该检查什么"分类到
+ * PassiveAnalysisErrorBus.ErrorKind。
  *
- * <p>分类规则（非穷尽，按实际抛出的异常类型映射）：</p>
- * <ul>
- *   <li><b>CONFIG</b>：消息文本中含"尚未配置"、"baseUrl"、"AI 服务"等关键字；
- *       这些是用户输入导致的失败，修复路径是去"设置"页改正；</li>
- *   <li><b>NETWORK</b>：底层是 {@link SocketTimeoutException} /
- *       {@link HttpConnectTimeoutException} / {@link HttpTimeoutException} /
- *       {@link ConnectException} / {@link UnknownHostException} /
- *       {@link NoRouteToHostException} 等连接阶段异常；修复路径是检查网络
- *       / 远端服务是否可达；</li>
- *   <li><b>REMOTE</b>：远端响应了，但状态码异常或响应体结构异常；
- *       修复路径是检查 API Key、模型名、配额、版本兼容性等。</li>
- * </ul>
+ * 分类规则（非穷尽，按实际抛出的异常类型映射）：
+ *   CONFIG：消息文本中含"尚未配置"、"baseUrl"、"AI 服务"等关键字；
+ *       这些是用户输入导致的失败，修复路径是去"设置"页改正；
+ *   NETWORK：底层是 SocketTimeoutException /
+ *       HttpConnectTimeoutException / HttpTimeoutException /
+ *       ConnectException / UnknownHostException /
+ *       NoRouteToHostException 等连接阶段异常；修复路径是检查网络
+ *       / 远端服务是否可达；
+ *   REMOTE：远端响应了，但状态码异常或响应体结构异常；
+ *       修复路径是检查 API Key、模型名、配额、版本兼容性等。
  *
- * <p>本类为纯函数式：所有方法都是 {@code static}，无状态，便于在分析线程安全调用。
- * </p>
+ * 本类为纯函数式：所有方法都是 {@code static}，无状态，便于在分析线程安全调用。
+ *
  */
 public final class PassiveAnalysisErrorClassifier {
 
@@ -67,10 +65,10 @@ public final class PassiveAnalysisErrorClassifier {
     /**
      * 仅按消息文本分类：用于非网络异常（如 AiException("尚未配置...")）。
      *
-     * <p>注意：本方法是纯文本匹配,判定关键字必须与"抛错方实际写入 message 的原文"
-     * 一致,<b>不能引用 UI 文案(如 I18n 翻译),也不能随界面语言变化</b>——否则同样的
+     * 注意：本方法是纯文本匹配,判定关键字必须与"抛错方实际写入 message 的原文"
+     * 一致,不能引用 UI 文案(如 I18n 翻译),也不能随界面语言变化——否则同样的
      * 错误在切换语言后会归到不同类别,分类结果不可复现。若将来要本地化 AiException
-     * 消息本身,应在抛错处携带错误类别/错误码,由这里按类别判定,而不是按翻译文本猜。</p>
+     * 消息本身,应在抛错处携带错误类别/错误码,由这里按类别判定,而不是按翻译文本猜。
      */
     public static PassiveAnalysisErrorBus.ErrorKind classifyByMessage(String message) {
         if (message == null) {
@@ -100,8 +98,8 @@ public final class PassiveAnalysisErrorClassifier {
     /**
      * 便捷方法：分类 + 提取用户可读消息。
      *
-     * <p>优先用根因（cause）的消息，因为它通常更具体（"Connection refused: connect"）；
-     * 根因为 null 时退化用外层消息（"AI 接口返回 HTTP 401: ..."）。</p>
+     * 优先用根因（cause）的消息，因为它通常更具体（"Connection refused: connect"）；
+     * 根因为 null 时退化用外层消息（"AI 接口返回 HTTP 401: ..."）。
      */
     static PassiveAnalysisErrorBus.ErrorKind classify(AiException ex) {
         if (ex == null) {

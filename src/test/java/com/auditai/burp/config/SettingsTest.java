@@ -14,8 +14,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * {@link Settings} 单元测试：多配置列表、激活项切换、增删、共享引用语义。
  *
- * <p>所有配置都是用户自己新建的；本测试覆盖的是
- * 在这种"纯用户配置"模型下的 Settings 行为。</p>
+ * 所有配置都是用户自己新建的；本测试覆盖的是
+ * 在这种"纯用户配置"模型下的 Settings 行为。
  */
 final class SettingsTest {
 
@@ -56,7 +56,7 @@ final class SettingsTest {
     }
 
     /**
-     * 切换到另一条配置：{@link Settings#activeConfig()} 的引用被<b>整体替换</b>为新对象
+     * 切换到另一条配置：{@link Settings#activeConfig()} 的引用被整体替换为新对象
      * ——读线程要么看到旧对象、要么看到新对象，永远不会"半新半旧"；
      * 旧对象在替换后不再被修改（这是避免撕裂读的核心保证）。
      */

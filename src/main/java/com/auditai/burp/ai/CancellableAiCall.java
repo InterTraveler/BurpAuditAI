@@ -6,18 +6,16 @@ import java.util.concurrent.CompletionException;
 import java.util.function.Function;
 
 /**
- * 一次<b>可取消</b>的 AI 调用句柄。
+ * 一次可取消的 AI 调用句柄。
  *
- * <p>由 {@link AiClient#completeAsync} 返回，支持两种用法：</p>
- * <ul>
- *   <li>{@link #await()}：阻塞等待调用完成并返回模型文本（失败抛 {@link AiException}）；</li>
- *   <li>{@link #cancel()}：从任意线程中断进行中的请求（底层为
- *       {@link CompletableFuture#cancel(boolean)}）；调用后 {@link #await()} 会以
- *       "分析已取消"的 {@link AiException} 结束。</li>
- * </ul>
+ * 由 AiClient.completeAsync 返回，支持两种用法：
+ *   await()：阻塞等待调用完成并返回模型文本（失败抛 AiException）；
+ *   cancel()：从任意线程中断进行中的请求（底层为
+ *       CompletableFuture.cancel(boolean)）；调用后 await() 会以
+ *       "分析已取消"的 AiException 结束。
  *
- * <p>{@link #await()} 是<b>幂等</b>的——响应映射只在第一次 await 时执行一次，
- * 成功/失败结果被缓存，后续 await 直接返回缓存。</p>
+ * await() 是幂等的——响应映射只在第一次 await 时执行一次，
+ * 成功/失败结果被缓存，后续 await 直接返回缓存。
  */
 public final class CancellableAiCall {
 
@@ -27,14 +25,14 @@ public final class CancellableAiCall {
     public record HttpResponseFrame(int statusCode, String body) {
     }
 
-    /** 底层异步网络请求（cancel 即取消它）。为 null 时表示走 {@link #mappedResult} 链式路径。 */
+    /** 底层异步网络请求（cancel 即取消它）。为 null 时表示走 mappedResult 链式路径。 */
     private final CompletableFuture<HttpResponseFrame> future;
 
     /** 把网络响应帧映射为最终文本（状态码检查 + JSON 解析，见实现类）。 */
     private final Function<HttpResponseFrame, String> responseMapper;
 
     /**
-     * 链式结果 future（与 {@link #future}/{@link #responseMapper} 二选一）：
+     * 链式结果 future（与 future/responseMapper 二选一）：
      * 用于 JSON 降级重试等已用 thenCompose 编排好的整条链路。
      */
     private final CompletableFuture<String> mappedResult;
@@ -57,9 +55,9 @@ public final class CancellableAiCall {
 
     /**
      * 链式结果构造：调用方已用 {@code thenCompose} / {@code thenApply} 把整条响应处理
-     * 链路编排为一个 {@link CompletableFuture}，本工厂直接包装。
+     * 链路编排为一个 CompletableFuture，本工厂直接包装。
      *
-     * <p>JSON 降级重试路径专用：两次出站必须挂同一条链，cancel 才能贯通到第二次。</p>
+     * JSON 降级重试路径专用：两次出站必须挂同一条链，cancel 才能贯通到第二次。
      *
      * @param mappedResult 已编排好的结果 future；await 时直接 join 即可。
      */
@@ -74,10 +72,10 @@ public final class CancellableAiCall {
     }
 
     /**
-     * 链式替换响应映射器：复用同一个底层 {@link CompletableFuture}，await 阶段改用新 mapper。
+     * 链式替换响应映射器：复用同一个底层 CompletableFuture，await 阶段改用新 mapper。
      *
-     * <p>链式路径调用本方法会抛 {@link IllegalStateException}——链式结果已经是 String，
-     * 套一层 frame 映射语义上不成立。</p>
+     * 链式路径调用本方法会抛 IllegalStateException——链式结果已经是 String，
+     * 套一层 frame 映射语义上不成立。
      */
     public CancellableAiCall mapResponse(Function<HttpResponseFrame, String> mapper) {
         if (mappedResult != null) {
@@ -121,7 +119,7 @@ public final class CancellableAiCall {
         }
     }
 
-    /** 真正执行一次 await（由 {@link #await()} 的缓存逻辑调用）。 */
+    /** 真正执行一次 await（由 await() 的缓存逻辑调用）。 */
     private String awaitOnce() throws AiException {
         try {
             HttpResponseFrame frame = future.join();
@@ -151,7 +149,7 @@ public final class CancellableAiCall {
     }
 
     /**
-     * 执行响应 → 文本映射，并把映射阶段抛出的非业务异常统一包装为 {@link AiException}。
+     * 执行响应 → 文本映射，并把映射阶段抛出的非业务异常统一包装为 AiException。
      */
     private String mapResponse(HttpResponseFrame frame) throws AiException {
         try {
@@ -164,7 +162,7 @@ public final class CancellableAiCall {
     }
 
     /**
-     * 取消本次调用：链式路径一次性取消整条 {@link CompletableFuture} 链（包括重试分支）。
+     * 取消本次调用：链式路径一次性取消整条 CompletableFuture 链（包括重试分支）。
      *
      * @return 是否成功取消（已完成的调用返回 false）。
      */

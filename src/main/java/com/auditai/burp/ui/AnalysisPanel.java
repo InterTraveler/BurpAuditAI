@@ -32,14 +32,12 @@ import java.io.Serial;
 /**
  * “分析”页签：管理多个报文页签（Repeater 风格）。
  *
- * <p>行为：</p>
- * <ul>
- *   <li>每次从其他模块右键 <b>“Send to AuditAI”</b> → 自动<b>新建一个编号页签</b>
- *       （1、2、3…）填入该报文并选中——<b>不会覆盖之前的报文</b>，可通过页签栏切换；</li>
- *   <li>页签栏<b>末尾的“+”</b>（Repeater 风格）：点击即新建一个空白页签，用于手动粘贴原始报文；</li>
- *   <li>每个页签（{@link MessageTab}）拥有独立的 Request/Response 编辑器、
- *       Analyze/Cancel 按钮与结果区，分析结果互不串扰。</li>
- * </ul>
+ * 行为：
+ *   每次从其他模块右键 “Send to AuditAI” → 自动新建一个编号页签
+ *       （1、2、3…）填入该报文并选中——不会覆盖之前的报文，可通过页签栏切换；
+ *   页签栏末尾的“+”（Repeater 风格）：点击即新建一个空白页签，用于手动粘贴原始报文；
+ *   每个页签（MessageTab）拥有独立的 Request/Response 编辑器、
+ *       Analyze/Cancel 按钮与结果区，分析结果互不串扰。
  */
 public final class AnalysisPanel extends JPanel implements LocaleAware {
 
@@ -62,9 +60,9 @@ public final class AnalysisPanel extends JPanel implements LocaleAware {
      * 分析完成回调：每个 MessageTab 完成分析后透传给它的"历史"页签 / 其它消费者；
      * 为 null 时 MessageTab 用 no-op hook（不向其它 store 通知）。
      *
-     * <p>非 final：允许装配阶段先 new AnalysisPanel（构造期 hook 已知），
-     * 也允许通过 {@link #setOnAnalysisCompleted} 在面板已存在时再注入
-     * （典型场景：装配方先 addTab 再回填 hook）。</p>
+     * 非 final：允许装配阶段先 new AnalysisPanel（构造期 hook 已知），
+     * 也允许通过 setOnAnalysisCompleted 在面板已存在时再注入
+     * （典型场景：装配方先 addTab 再回填 hook）。
      */
     private MessageTab.AnalysisResultHook onAnalysisCompleted;
 
@@ -89,7 +87,7 @@ public final class AnalysisPanel extends JPanel implements LocaleAware {
      * 同一"发送"动作重复触发的合并窗口（毫秒）。
      * Burp 的上下文菜单在个别版本/场景下点击一次会偶发多次 ActionEvent，
      * 若每次都新建页签会一次生成 1、2、3… 多个页签（表现为页面爆满、卡顿）。
-     * 窗口内仅合并<b>指纹相同</b>的重复事件（同一报文），不同报文的连续发送不受影响。
+     * 窗口内仅合并指纹相同的重复事件（同一报文），不同报文的连续发送不受影响。
      */
     private static final long ACCEPT_DEBOUNCE_MS = 300L;
 
@@ -183,8 +181,8 @@ public final class AnalysisPanel extends JPanel implements LocaleAware {
      * 从其他模块（上下文菜单）接收报文：新建一个编号页签并填入，自动选中。
      * 可在任意线程调用：内部切回 EDT。
      *
-     * <p>防抖：同一次右键动作若被 Burp 重复触发（短时间内多次调用且报文指纹相同），
-     * 只新建一次页签；不同报文的连续发送不受 300ms 窗口限制。</p>
+     * 防抖：同一次右键动作若被 Burp 重复触发（短时间内多次调用且报文指纹相同），
+     * 只新建一次页签；不同报文的连续发送不受 300ms 窗口限制。
      *
      * @param message 请求/响应快照。
      */
@@ -335,9 +333,9 @@ public final class AnalysisPanel extends JPanel implements LocaleAware {
     /**
      * Repeater 风格的页签标题组件。
      *
-     * <p>非编辑态使用 {@link JLabel} 显示标题，因此点击标题时事件会正常交给
-     * {@link JTabbedPane} 处理，不会像 JTextField 那样吞掉点击导致页签无法切换；
-     * 双击标题后切到同尺寸的编辑框进行重命名。</p>
+     * 非编辑态使用 JLabel 显示标题，因此点击标题时事件会正常交给
+     * JTabbedPane 处理，不会像 JTextField 那样吞掉点击导致页签无法切换；
+     * 双击标题后切到同尺寸的编辑框进行重命名。
      */
     private final class TabHeader extends JPanel {
 
@@ -351,9 +349,9 @@ public final class AnalysisPanel extends JPanel implements LocaleAware {
         /**
          * 用户是否重命名过本页签（进过编辑态并提交）。
          *
-         * <p>未重命名时标题 tooltip 是"双击重命名"提示文案（需随语言切换刷新）；
+         * 未重命名时标题 tooltip 是"双击重命名"提示文案（需随语言切换刷新）；
          * 重命名后 tooltip 改为展示完整标题（截断时悬停看全名，非翻译文案），
-         * 语言切换时保持不变。</p>
+         * 语言切换时保持不变。
          */
         private boolean renamed;
 

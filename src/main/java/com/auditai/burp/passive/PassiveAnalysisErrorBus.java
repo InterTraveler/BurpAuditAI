@@ -7,41 +7,37 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * 被动分析错误状态总线：在插件内跨线程共享"被动分析最近一次错误"。
  *
- * <p><b>为什么需要这个类</b>：被动分析在独立线程池里执行，AI 调用失败时用户
+ * 为什么需要这个类：被动分析在独立线程池里执行，AI 调用失败时用户
  * 通常并不停留在分析页 / 历史页，需要在"设置"页签的"被动分析"区下方持续
  * 展示错误信息 + 在"设置"页签标题右侧加感叹号，让用户即使停留在其他页签
- * 也能立刻感知到问题。</p>
+ * 也能立刻感知到问题。
  *
- * <p><b>设计取舍</b>：</p>
- * <ul>
- *   <li>用 <b>单例</b>（{@link #INSTANCE}）暴露：被动分析回调线程（{@code PassiveAnalyzer}）
- *       与 UI 监听线程（{@code SettingsPanel}）天然解耦，无需在装配链中显式注入；</li>
- *   <li>用 {@link AtomicReference} 存错误快照：单字段原子写，读侧无锁，足够应对
- *       "设置一次 + 读很多次"的使用模式；</li>
- *   <li>用 {@link CopyOnWriteArrayList} 存监听器：监听器数量极少（通常 1-2 个 UI 实例），
- *       写时复制避免遍历时并发修改异常，遍历无锁；</li>
- *   <li>监听器在<b>调用线程</b>同步触发：避免另起线程执行 UI 更新造成时序混乱；
+ * 设计取舍：
+ *   用 单例（INSTANCE）暴露：被动分析回调线程（{@code PassiveAnalyzer}）
+ *       与 UI 监听线程（{@code SettingsPanel}）天然解耦，无需在装配链中显式注入；
+ *   用 AtomicReference 存错误快照：单字段原子写，读侧无锁，足够应对
+ *       "设置一次 + 读很多次"的使用模式；
+ *   用 CopyOnWriteArrayList 存监听器：监听器数量极少（通常 1-2 个 UI 实例），
+ *       写时复制避免遍历时并发修改异常，遍历无锁；
+ *   监听器在调用线程同步触发：避免另起线程执行 UI 更新造成时序混乱；
  *       UI 监听器需自行判断是否需要 {@code SwingUtilities.invokeLater} 切到 EDT
- *       （本类的 UI 实现就遵守这一点）。</li>
- * </ul>
+ *       （本类的 UI 实现就遵守这一点）。
  *
- * <p><b>错误分类</b>：仅按用户可读的三种根因归类——配置不当、网络不可达、远端错误——
- * 便于在 UI 上提示"该去检查什么"（详见 {@link ErrorKind}）。</p>
+ * 错误分类：仅按用户可读的三种根因归类——配置不当、网络不可达、远端错误——
+ * 便于在 UI 上提示"该去检查什么"（详见 ErrorKind）。
  */
 public final class PassiveAnalysisErrorBus {
 
     /**
      * 错误根因分类：决定 UI 提示用户的"该去检查什么"。
      *
-     * <p>分类不追求穷尽（异常体系内部原因很多），只追求"对用户下一步动作有指导意义"：</p>
-     * <ul>
-     *   <li>{@link #CONFIG}：用户输入有问题——Base URL 缺失 / 格式错、模型名缺失等，
-     *       修复路径是去"设置"页改正配置；</li>
-     *   <li>{@link #NETWORK}：本地/远端网络问题——连接超时、UnknownHost、Connection Refused
-     *       等，修复路径是检查网络/服务是否可达；</li>
-     *   <li>{@link #REMOTE}：远端服务响应了——HTTP 4xx/5xx 或响应体结构异常，
-     *       修复路径是检查 API Key、模型名、配额、模型版本兼容性等。</li>
-     * </ul>
+     * 分类不追求穷尽（异常体系内部原因很多），只追求"对用户下一步动作有指导意义"：
+     *   CONFIG：用户输入有问题——Base URL 缺失 / 格式错、模型名缺失等，
+     *       修复路径是去"设置"页改正配置；
+     *   NETWORK：本地/远端网络问题——连接超时、UnknownHost、Connection Refused
+     *       等，修复路径是检查网络/服务是否可达；
+     *   REMOTE：远端服务响应了——HTTP 4xx/5xx 或响应体结构异常，
+     *       修复路径是检查 API Key、模型名、配额、模型版本兼容性等。
      */
     public enum ErrorKind {
         /** 配置不当：Base URL 为空 / 格式不正确 / 尚未配置 AI 服务等。 */
@@ -55,7 +51,7 @@ public final class PassiveAnalysisErrorBus {
     /**
      * 错误快照：消息文本 + 分类 + 发生时间戳。
      *
-     * <p>不可变对象，写入后无法修改；{@link #cleared()} 是"空态"哨兵。</p>
+     * 不可变对象，写入后无法修改；cleared() 是"空态"哨兵。
      */
     public static final class ErrorInfo {
         private final String message;
@@ -112,8 +108,8 @@ public final class PassiveAnalysisErrorBus {
      * 记录一次错误：覆盖当前错误（不是追加）——最近一次的错误对用户最有价值。
      * 触发所有监听器。
      *
-     * <p>调用线程：任意（被动分析线程、UI 线程等）。监听器内若操作 Swing 组件，
-     * 需自行切到 EDT（{@code SwingUtilities.invokeLater}）。</p>
+     * 调用线程：任意（被动分析线程、UI 线程等）。监听器内若操作 Swing 组件，
+     * 需自行切到 EDT（{@code SwingUtilities.invokeLater}）。
      *
      * @param message 错误描述（用户可读，UI 直接展示）。
      * @param kind    错误分类。
@@ -140,7 +136,7 @@ public final class PassiveAnalysisErrorBus {
     }
 
     /**
-     * 当前错误快照：可能为"无错误"（{@link ErrorInfo#isCleared()} == true）。
+     * 当前错误快照：可能为"无错误"（ErrorInfo.isCleared() == true）。
      * 无锁读，开销可忽略。
      */
     public ErrorInfo getError() {
@@ -148,11 +144,11 @@ public final class PassiveAnalysisErrorBus {
     }
 
     /**
-     * 注册一个错误变化监听器：任何 {@link #setError} / {@link #clearError} 都会触发。
+     * 注册一个错误变化监听器：任何 setError / clearError 都会触发。
      * 监听器在调用线程同步执行。
      *
-     * <p>注册后<b>不会</b>立即触发一次回调——调用方如需当前状态请自行
-     * {@link #getError()} 后渲染一次。</p>
+     * 注册后不会立即触发一次回调——调用方如需当前状态请自行
+     * getError() 后渲染一次。
      */
     public void addListener(Runnable listener) {
         if (listener != null) {
@@ -172,21 +168,19 @@ public final class PassiveAnalysisErrorBus {
     /**
      * 清空所有监听器：插件卸载时调用。
      *
-     * <p>本总线是进程内单例（{@link #INSTANCE}）——{@link #listeners} 用
-     * {@link CopyOnWriteArrayList} 强引用持有监听器，监听器又强引用持有它的
+     * 本总线是进程内单例（INSTANCE）——listeners 用
+     * CopyOnWriteArrayList 强引用持有监听器，监听器又强引用持有它的
      * 组件（如 {@code SettingsPanel}）。插件卸载时若不主动清：
-     * <ul>
-     *   <li>{@code SettingsPanel.close()} 内部会逐个调
-     *       {@link #removeListener(Runnable)} 摘自己的 listener（生产路径已
-     *       实现），所以正常卸载路径不会泄漏；</li>
-     *   <li>但任何"忘注册 close"的子页签 / 中途异常跳过的卸载路径都会留下
+     *   {@code SettingsPanel.close()} 内部会逐个调
+     *       removeListener(Runnable) 摘自己的 listener（生产路径已
+     *       实现），所以正常卸载路径不会泄漏；
+     *   但任何"忘注册 close"的子页签 / 中途异常跳过的卸载路径都会留下
      *       强引用 → Burp 重载后旧 MainTab 不会 GC → 切语言时旧组件被刷
-     *       出 NPE。</li>
-     * </ul>
+     *       出 NPE。
      *
-     * <p>作为最后一道防线，{@code AuditAiExtension.registerUnloadingHandler} 内
+     * 作为最后一道防线，{@code AuditAiExtension.registerUnloadingHandler} 内
      * 调一次本方法，把整个 listener 列表清空。清空后新实例重新注册不受影响
-     * （{@code SettingsPanel} 构造时调 {@link #addListener(Runnable)}）。</p>
+     * （{@code SettingsPanel} 构造时调 addListener(Runnable)）。
      */
     public void clearListeners() {
         listeners.clear();
@@ -196,9 +190,9 @@ public final class PassiveAnalysisErrorBus {
      * 同步触发所有监听器：异常隔离——单个监听器抛异常不影响其他监听器，
      * 也不影响其他业务线程。
      *
-     * <p>总线是 {@link #INSTANCE} 单例、无法注入 Montoya API；监听器回调里抛异常的
+     * 总线是 INSTANCE 单例、无法注入 Montoya API；监听器回调里抛异常的
      * 极端兜底只能走 stderr——本路径应通过严格的 listener 写法避免（生产代码
-     * {@code SettingsPanel} 的回调已用 try-catch 隔离）。</p>
+     * {@code SettingsPanel} 的回调已用 try-catch 隔离）。
      */
     private void fireListeners() {
         for (Runnable l : listeners) {

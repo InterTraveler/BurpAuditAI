@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@link BodyStorage} 单元测试：覆盖"小报文直通 / binary 截断 / JSON 字符串裁剪 /
  * JSON 数组/对象元素上限 / SHA-256 稳定性 + ThreadLocal 释放"等边界。
  *
- * <p>纯函数测试，不依赖 Burp 运行时。</p>
+ * 纯函数测试，不依赖 Burp 运行时。
  */
 final class BodyStorageTest {
 
@@ -156,11 +156,11 @@ final class BodyStorageTest {
     /**
      * 多字节字符（中文）的 JSON 字符串超限时必须真的被截短。
      *
-     * <p>回归用例：阈值 {@code MAX_JSON_STRING_BYTES} 是 UTF-8 <b>字节</b>数，而历史实现
-     * 用 {@code MAX_JSON_STRING_BYTES / 2} 当<b>字符</b>数上限——中文 1 字符 3 字节，
+     * 回归用例：阈值 {@code MAX_JSON_STRING_BYTES} 是 UTF-8 字节数，而历史实现
+     * 用 {@code MAX_JSON_STRING_BYTES / 2} 当字符数上限——中文 1 字符 3 字节，
      * 一个 40KB 字符的中文串已达 120KB 字节（超限），但字符数远小于 32K，
      * {@code Math.min(len, 32K)} 取到全长，结果"裁剪"一个字符没删、反而追加了标记，
-     * body 变得更大且上限失效。</p>
+     * body 变得更大且上限失效。
      */
     @Test
     void prepareStoredMessage_largeCjkJsonStringIsActuallyClipped() {

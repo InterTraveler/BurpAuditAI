@@ -38,26 +38,22 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * "历史"页签：展示经 AI 分析模块实际处理过的报文。
  *
- * <p>数据源是 {@link AnalysisHistoryStore}，仅记录：</p>
- * <ul>
- *   <li>手动分析（用户点 Analyze）触发的报文；</li>
- *   <li>被动分析（按规则 + 指纹去重后自动触发）触发的报文。</li>
- * </ul>
+ * 数据源是 {@link AnalysisHistoryStore}，仅记录：
+ *   手动分析（用户点 Analyze）触发的报文；
+ *   被动分析（按规则 + 指纹去重后自动触发）触发的报文。
  *
- * <p>布局：</p>
- * <ul>
- *   <li><b>上方</b>表格列出 7 列：序号 / 时间 / Method / URL / 类型（手动/被动）/
- *       问题数量 / 风险等级；URL 过滤框 + 状态文本；</li>
- *   <li><b>下方</b>左右分栏显示选中记录的 Request / Response（Burp 原生编辑器，
- *       支持 Raw / Pretty / Headers / Body 切换）；</li>
- *   <li>风险等级列带颜色徽章（与"问题"页签的严重程度颜色保持一致）；</li>
- *   <li>表格<b>右键菜单</b>两项：<b>"删除记录"</b>（单条删除右键所在的记录，
- *       <b>不弹确认框</b>——右键菜单本身就是明确的删除意图）和 <b>"Clear history"</b>
- *       （清空当前项目全部历史，操作前弹确认框，语义与原先工具栏 Clear 按钮一致）。</li>
- * </ul>
+ * 布局：
+ *   上方表格列出 7 列：序号 / 时间 / Method / URL / 类型（手动/被动）/
+ *       问题数量 / 风险等级；URL 过滤框 + 状态文本；
+ *   下方左右分栏显示选中记录的 Request / Response（Burp 原生编辑器，
+ *       支持 Raw / Pretty / Headers / Body 切换）；
+ *   风险等级列带颜色徽章（与"问题"页签的严重程度颜色保持一致）；
+ *   表格右键菜单两项："删除记录"（单条删除右键所在的记录，
+ *       不弹确认框——右键菜单本身就是明确的删除意图）和 "Clear history"
+ *       （清空当前项目全部历史，操作前弹确认框，语义与原先工具栏 Clear 按钮一致）。
  *
- * <p>报文字节按需从 {@code AnalysisHistoryStore} 写入的 gzip 文件读盘，
- * 内存峰值由 {@link AnalysisHistoryStore#DEFAULT_MAX_ENTRY_BYTES} 限制。</p>
+ * 报文字节按需从 {@code AnalysisHistoryStore} 写入的 gzip 文件读盘，
+ * 内存峰值由 {@link AnalysisHistoryStore#DEFAULT_MAX_ENTRY_BYTES} 限制。
  */
 public final class AnalysisHistoryPanel extends JPanel implements LocaleAware {
 
@@ -286,10 +282,10 @@ public final class AnalysisHistoryPanel extends JPanel implements LocaleAware {
     /**
      * 组装"问题数量"列展示文本：失败时显示错误描述（带前缀），成功时按 finding 数量展示。
      *
-     * <p>摘要原文（{@code entry.getSummary()}）不再直接出现在列表列里——
+     * 摘要原文（{@code entry.getSummary()}）不再直接出现在列表列里——
      * AI 自由生成的自然语言在表格列里既冗长又不可对比；统一用问题数量这种
      * 标准化字段，列表扫读速度更快，具体结论留在选中记录后的详情面板/弹窗里看。
-     * 过滤功能仍可命中 summary（{@link #matchesFilter} 入参不变），保持原有检索习惯。</p>
+     * 过滤功能仍可命中 summary（{@link #matchesFilter} 入参不变），保持原有检索习惯。
      */
     private static String formatConclusion(int findingCount, String error) {
         if (error != null && !error.isEmpty()) {
@@ -308,7 +304,7 @@ public final class AnalysisHistoryPanel extends JPanel implements LocaleAware {
      * 多字段通配符过滤：不区分大小写；星号匹配任意字符，其余按原文匹配；任一字段命中即视为通过。
      * 供本类（历史页签）和 {@code FindingsPanel}（问题页签）共用，分别传入 URL + 分析摘要 / URL + 描述。
      *
-     * <p>空过滤串或 {@code "*"} 表示不过滤；任意字段为 null 视为不命中。</p>
+     * 空过滤串或 {@code "*"} 表示不过滤；任意字段为 null 视为不命中。
      */
     public static boolean matchesFilter(String filter, String... fields) {
         if (filter == null || filter.isEmpty() || "*".equals(filter)) {
@@ -401,15 +397,15 @@ public final class AnalysisHistoryPanel extends JPanel implements LocaleAware {
     /**
      * 创建表格右键菜单：提供"删除记录"、"链路追踪"和"Clear history"三项。
      *
-     * <p>弹出前自动选中鼠标所在行（避免"点行 A 但选中行 B"的错位，与
+     * 弹出前自动选中鼠标所在行（避免"点行 A 但选中行 B"的错位，与
      * {@code FindingsPanel.createContextMenu} 的做法一致）；鼠标不在任何数据行上时
      * 禁用"删除记录"和"链路追踪"项，避免菜单在空白处可点却无事可删。"Clear history" 项
-     * 在 store 不可用或当前无任何记录时禁用，保留确认弹窗语义。</p>
+     * 在 store 不可用或当前无任何记录时禁用，保留确认弹窗语义。
      *
-     * <p>"删除记录"动作本身<b>不弹确认框</b>：需求约定右键菜单已表达明确的删除意图，
+     * "删除记录"动作本身不弹确认框：需求约定右键菜单已表达明确的删除意图，
      * 不必再二次确认。"Clear history" 仍弹确认框，避免误清空（与原工具栏 Clear 按钮
      * 语义一致）。"链路追踪" 仅在当前 entry 对应 audit-trail 文件存在时启用——取消
-     * / 旧数据 / 落盘失败时该 entry 没有 XML，菜单禁用而不是点了再弹错误。</p>
+     * / 旧数据 / 落盘失败时该 entry 没有 XML，菜单禁用而不是点了再弹错误。
      */
     private JPopupMenu createContextMenu() {
         JPopupMenu menu = new JPopupMenu();
@@ -460,9 +456,9 @@ public final class AnalysisHistoryPanel extends JPanel implements LocaleAware {
     /**
      * 右键菜单"链路追踪"动作：弹出非模态窗口展示当前选中 entry 的 audit-trail。
      *
-     * <p>每次都实时调用 {@link AuditTrailDialog#show} 解析 XML，<b>不</b>缓存结果——
+     * 每次都实时调用 {@link AuditTrailDialog#show} 解析 XML，不缓存结果——
      * 用户期望"现在看到的"就是磁盘上最新数据。如果未来要支持"刷新"按钮，再加缓存层；
-     * 目前刻意保持简单，避免缓存与磁盘不一致的隐性 bug。</p>
+     * 目前刻意保持简单，避免缓存与磁盘不一致的隐性 bug。
      */
     private void showAuditTrailForSelectedRow() {
         AnalysisHistoryEntry entry = selectedEntry();
@@ -532,12 +528,12 @@ public final class AnalysisHistoryPanel extends JPanel implements LocaleAware {
     /**
      * 删除当前选中行的单条历史记录（右键菜单"删除记录"）。
      *
-     * <p>不弹确认框。流程：先取消该记录可能仍在飞行的预览加载，再调用
-     * {@link AnalysisHistoryStore#delete}；删除成功后<b>同步被动分析去重缓存</b>——
+     * 不弹确认框。流程：先取消该记录可能仍在飞行的预览加载，再调用
+     * {@link AnalysisHistoryStore#delete}；删除成功后同步被动分析去重缓存——
      * 若没有其它保留记录还持有同一请求指纹，则从 {@code FingerprintDedup} 移除该指纹
      * （与 Clear 全清时同步清空 dedup 同一语义：删除后同 URL 的新报文可被重新被动分析）。
      * 随后清空 Request / Response 预览区并立即刷新表格，让该行立刻消失（store listener
-     * 还会再补一次延迟刷新，双重触发幂等，无副作用）。</p>
+     * 还会再补一次延迟刷新，双重触发幂等，无副作用）。
      */
     private void deleteEntryAtSelectedRow() {
         long entryId = selectedEntryId();
@@ -594,7 +590,7 @@ public final class AnalysisHistoryPanel extends JPanel implements LocaleAware {
     /**
      * 在后台读取 entry 关联的 gzip 报文并更新预览区。
      *
-     * <p>旧在飞行的任务会被取消，避免快速切换时旧任务完成后覆盖新数据。</p>
+     * 旧在飞行的任务会被取消，避免快速切换时旧任务完成后覆盖新数据。
      */
     private void loadRecord(long entryId) {
         SwingWorker<Void, Void> previous = loadInFlight.getAndSet(null);
@@ -694,20 +690,18 @@ public final class AnalysisHistoryPanel extends JPanel implements LocaleAware {
     /**
      * 设置表格各列的 preferredWidth / minWidth / maxWidth。
      *
-     * <p>列宽策略（按表格列顺序）：</p>
-     * <ul>
-     *   <li><b>序号</b>：固定 60px——纯数字 + 短</li>
-     *   <li><b>时间</b>：固定 170px——"yyyy-MM-dd HH:mm:ss" 19 字符</li>
-     *   <li><b>Method</b>：固定 80px——"GET" / "POST" 短字</li>
-     *   <li><b>URL</b>：弹性（preferred 400、最小 200）——核心字段，最长</li>
-     *   <li><b>类型</b>：固定 80px——"手动" / "被动"</li>
-     *   <li><b>问题数量</b>：固定 140px——"999 个问题" / "无问题" / "[失败] 短描述"，列内容已标准化为短字</li>
-     *   <li><b>风险</b>：固定 90px——"严重" / "高危" / "—" 3 字</li>
-     * </ul>
+     * 列宽策略（按表格列顺序）：
+     *   序号：固定 60px——纯数字 + 短
+     *   时间：固定 170px——"yyyy-MM-dd HH:mm:ss" 19 字符
+     *   Method：固定 80px——"GET" / "POST" 短字
+     *   URL：弹性（preferred 400、最小 200）——核心字段，最长
+     *   类型：固定 80px——"手动" / "被动"
+     *   问题数量：固定 140px——"999 个问题" / "无问题" / "[失败] 短描述"，列内容已标准化为短字
+     *   风险：固定 90px——"严重" / "高危" / "—" 3 字
      *
-     * <p>弹性列允许用户在表头分隔条上拖动调整；固定列不可拖。整体布局：
+     * 弹性列允许用户在表头分隔条上拖动调整；固定列不可拖。整体布局：
      "窄-窄-窄-弹-窄-窄-窄"，与原 HttpHistoryPanel "全部等宽"相比，长字段不再被截断，
-     短字段也不再虚占过多横向空间。</p>
+     短字段也不再虚占过多横向空间。
      */
     private static void applyColumnWidthPreferences(JTable table) {
         // 列顺序必须与 currentColumns() 长度(7)一致: 序号/时间/Method/URL/类型/问题数量/风险。

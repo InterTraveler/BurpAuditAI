@@ -15,16 +15,16 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * "重放请求"工具的 {@link Tool} 适配器：把通用的工具调用协议翻译成具体的"重放"动作。
+ * "重放请求"工具的 Tool 适配器：把通用的工具调用协议翻译成具体的"重放"动作。
  *
- * <p>本类是"能力实现"的代表——它把"replay"这个常驻分析能力包装成标准 {@link Tool}
- * 接口，让 {@link com.auditai.burp.tools.ToolLoopOrchestrator} 通过
- * {@code Map<String, Tool>} 路由调用，无需知道"replay"的具体协议细节。</p>
+ * 本类是"能力实现"的代表——它把"replay"这个常驻分析能力包装成标准 Tool
+ * 接口，让 com.auditai.burp.tools.ToolLoopOrchestrator 通过
+ * {@code Map<String, Tool>} 路由调用，无需知道"replay"的具体协议细节。
  *
- * <p><b>v3 协议：按位置分类的参数替换</b></p>
+ * v3 协议：按位置分类的参数替换
  *
- * <p>模型在 {@code arguments} 里提交 6 类参数，每类一个 map：</p>
- * <pre>{@code
+ * 模型在 {@code arguments} 里提交 6 类参数，每类一个 map：
+ * {@code
  * {
  *   "reason": "闭合单引号",
  *   "replace_query_params":       { "id": "1'" },          // URL 上的 ?k=v 参数
@@ -34,20 +34,18 @@ import java.util.Map;
  *   "replace_path_params":        { "123": "1'" },         // URL 路径段（key = 段当前字面值）
  *   "replace_multipart_params":   { "file": "shell.php" }  // multipart/form-data 的 part
  * }
- * }</pre>
+ * }
  *
- * <p>本类负责：</p>
- * <ol>
- *   <li>把 JSON 反序列化成 {@link ReplayRequest}（6 个 map 各自解析）；</li>
- *   <li>调 {@link ReplayService#execute} 真实发送；</li>
- *   <li>用 {@link PromptBuilder#buildReplayResultUserPrompt} 把结果渲染成 user 段文本，
- *       并在末尾追加"key=old → key=new"diff——让模型下一轮能直接看到"我刚才到底改了哪几处"。</li>
- * </ol>
+ * 本类负责：
+ *   把 JSON 反序列化成 ReplayRequest（6 个 map 各自解析）；
+ *   调 ReplayService.execute 真实发送；
+ *   用 PromptBuilder.buildReplayResultUserPrompt 把结果渲染成 user 段文本，
+ *       并在末尾追加"key=old → key=new"diff——让模型下一轮能直接看到"我刚才到底改了哪几处"。
  *
- * <p><b>为什么需要这个适配层？</b>{@link ReplayService} 本身做的是"执行单次 HTTP 重放"，
- * 接受强类型 {@link ReplayRequest}；而 orchestrator 给到的是
- * {@link ToolCall}{@code (name, reason, argumentsJson)}，需要把 JSON 反序列化成
- * {@code ReplayRequest} 然后调 {@code ReplayService}。本类负责这道"协议转换"。</p>
+ * 为什么需要这个适配层？ReplayService 本身做的是"执行单次 HTTP 重放"，
+ * 接受强类型 ReplayRequest；而 orchestrator 给到的是
+ * ToolCall{@code (name, reason, argumentsJson)}，需要把 JSON 反序列化成
+ * {@code ReplayRequest} 然后调 {@code ReplayService}。本类负责这道"协议转换"。
  */
 public final class ReplayTool implements Tool {
 
@@ -61,7 +59,7 @@ public final class ReplayTool implements Tool {
 
     /**
      * 完整构造器：注入 Montoya API、PromptBuilder（用于把响应渲染成 user 段文本）
-     * 和原请求（用于锁定 host:port:scheme）。后两者仅用于初始化 {@link ReplayService}，
+     * 和原请求（用于锁定 host:port:scheme）。后两者仅用于初始化 ReplayService，
      * 本类自己不再持有——持有 {@code api}/{@code originalRequest} 既占内存又无意义。
      */
     public ReplayTool(MontoyaApi api, PromptBuilder promptBuilder, HttpRequest originalRequest) {
@@ -109,7 +107,7 @@ public final class ReplayTool implements Tool {
     }
 
     /**
-     * 把 {@code arguments} JSON 解析为强类型 {@link ReplayRequest}。
+     * 把 {@code arguments} JSON 解析为强类型 ReplayRequest。
      */
     private ReplayRequest parseArgs(JsonObject args) {
         if (args == null) {
@@ -138,9 +136,9 @@ public final class ReplayTool implements Tool {
      * {@code replace_header_params} / {@code replace_json_params} / {@code replace_path_params} /
      * {@code replace_multipart_params}）。
      *
-     * <p>必须是"对象"形式（{@code {"k":"v", ...}}）；缺失或非对象都视为空 Map
-     * （由 {@link #execute} 后续判"空"报错）。value 强制转 String——避免模型写
-     * 数字 / 布尔 / 数组 时被默默接受、产生歧义。</p>
+     * 必须是"对象"形式（{@code {"k":"v", ...}}）；缺失或非对象都视为空 Map
+     * （由 execute 后续判"空"报错）。value 强制转 String——避免模型写
+     * 数字 / 布尔 / 数组 时被默默接受、产生歧义。
      */
     private static Map<String, String> parseStringMap(JsonObject args, String fieldName) {
         if (args == null || !args.has(fieldName) || args.get(fieldName).isJsonNull()) {
@@ -171,9 +169,9 @@ public final class ReplayTool implements Tool {
     /**
      * 读一个可选字符串字段：非原始值（对象/数组）返回 null 而不是抛异常。
      *
-     * <p>{@code JsonObject#getAsString()} 对对象/数组会抛 {@link UnsupportedOperationException}，
-     * 而 {@link Tool#execute} 的契约是"绝对不能抛异常"——模型把 {@code "reason"} 写成对象时
-     * 必须降级成"无 reason"，不能让整轮工具循环崩掉。</p>
+     * {@code JsonObject#getAsString()} 对对象/数组会抛 UnsupportedOperationException，
+     * 而 Tool.execute 的契约是"绝对不能抛异常"——模型把 {@code "reason"} 写成对象时
+     * 必须降级成"无 reason"，不能让整轮工具循环崩掉。
      */
     private static String optString(JsonObject obj, String key) {
         if (obj == null || !obj.has(key) || obj.get(key).isJsonNull()
@@ -186,7 +184,7 @@ public final class ReplayTool implements Tool {
     /**
      * 给 user 段用的小摘要：本次重放改了哪几个 key、每个 key 的位置和原值→新值。
      *
-     * <p>没有 changes（空 Map 重发或失败前没改）时，回退到 reason。</p>
+     * 没有 changes（空 Map 重发或失败前没改）时，回退到 reason。
      */
     private static String summarizeRequest(ReplayRequest req, ReplayResult result) {
         List<ReplayRequest.ParamChange> changes = result.changesOrEmpty();

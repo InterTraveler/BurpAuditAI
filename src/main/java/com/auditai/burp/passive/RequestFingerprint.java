@@ -7,21 +7,21 @@ import java.util.Arrays;
 /**
  * 请求指纹 = HTTP方法 + URL(含query) + 请求体 Hash（若有）。
  *
- * <p>用于 {@link FingerprintDedup}：同一指纹只分析一次，避免对同一请求重复调 AI。</p>
+ * 用于 FingerprintDedup：同一指纹只分析一次，避免对同一请求重复调 AI。
  *
- * <p><b>输入语义：</b>本类接受<b>完整原始请求字节</b>（请求行 + headers + body），
- * 内部只取 <code>\r\n\r\n</code> 之后的 body 部分做哈希——指纹严格按需求定义为
+ * 输入语义：本类接受完整原始请求字节（请求行 + headers + body），
+ * 内部只取 \r\n\r\n 之后的 body 部分做哈希——指纹严格按需求定义为
  * "请求体 Hash"，动态 header（Cookie / CSRF / 时间戳等）不参与指纹，避免同一
  * URL+body 因 header 变化被重复分析。请求体为空（GET 类无 body 请求）时按
  * "无 body" 处理，hash 部分用 {@code "nobody"} 占位，避免与"有 body 但恰好 hash
- * 为空"边界情况混淆。大 body 只哈希前 {@link #HASH_CAP_BYTES} 字节并附带总长度
- * （去重用启发式，非安全用途），避免超大上传把内存和哈希时间吃掉。</p>
+ * 为空"边界情况混淆。大 body 只哈希前 HASH_CAP_BYTES 字节并附带总长度
+ * （去重用启发式，非安全用途），避免超大上传把内存和哈希时间吃掉。
  *
- * <p><b>哈希实现：</b>直接使用 JDK {@link java.security.MessageDigest}（SHA-256）。
+ * 哈希实现：直接使用 JDK java.security.MessageDigest（SHA-256）。
  * 每次调用新建实例，无共享可变状态，可在任意线程（包括被动分析工作线程）并发调用。
  * （不用 Montoya 的 {@code cryptoUtils().generateDigest}：Montoya 的
  * {@code ByteArray.byteArray} 依赖 Burp 运行时的对象工厂，单元测试环境不可用；
- * 且纯 JDK 实现去掉对 Burp 运行时工厂的依赖，便于测试与隔离。）</p>
+ * 且纯 JDK 实现去掉对 Burp 运行时工厂的依赖，便于测试与隔离。）
  */
 public final class RequestFingerprint {
 
@@ -73,8 +73,8 @@ public final class RequestFingerprint {
     }
 
     /**
-     * body → 指纹摘要串：长度不超过 {@link #HASH_CAP_BYTES} 时哈希完整 body；
-     * 超过时只哈希前 {@link #HASH_CAP_BYTES} 字节并附加 {@code -<总长度>}，
+     * body → 指纹摘要串：长度不超过 HASH_CAP_BYTES 时哈希完整 body；
+     * 超过时只哈希前 HASH_CAP_BYTES 字节并附加 {@code -<总长度>}，
      * 保证不同长度、或前 64KB 不同的 body 不会互相碰撞（前 64KB 相同且等长的
      * 不同 body 理论上可能碰撞——去重用启发式，可接受）。
      */

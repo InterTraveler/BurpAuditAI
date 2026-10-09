@@ -10,22 +10,20 @@ import java.io.Serial;
 /**
  * 统一风格按钮：主题原生渲染（Repeater 风格）。
  *
- * <p>不再自定义绘制：按钮的形状、圆角、悬停、按下、禁用等外观<b>完全交给当前 L&amp;F
- * （Burp 的主题）渲染</b>——与 Repeater 的 Send / Cancel 按钮走完全相同的渲染路径，
- * 因此样式与大小原生一致，不需要手工仿制。</p>
+ * 不再自定义绘制：按钮的形状、圆角、悬停、按下、禁用等外观完全交给当前 L&amp;F
+ * （Burp 的主题）渲染——与 Repeater 的 Send / Cancel 按钮走完全相同的渲染路径，
+ * 因此样式与大小原生一致，不需要手工仿制。
  *
- * <p>配色通过两路设置：</p>
- * <ul>
- *   <li>{@code setBackground / setForeground}：对大多数 L&amp;F 生效（含预览环境的默认 L&amp;F）；</li>
- *   <li>{@code FlatLaf.style} 客户端属性：Burp 主题基于 FlatLaf，用 style 强制
- *       背景 / 悬停背景 / 前景色，并让悬停只变背景、文字颜色不变（与主题按钮行为一致）。</li>
- * </ul>
+ * 配色通过两路设置：
+ *   {@code setBackground / setForeground}：对大多数 L&amp;F 生效（含预览环境的默认 L&amp;F）；
+ *   {@code FlatLaf.style} 客户端属性：Burp 主题基于 FlatLaf，用 style 强制
+ *       背景 / 悬停背景 / 前景色，并让悬停只变背景、文字颜色不变（与主题按钮行为一致）。
  *
- * <p>除构造函数外，本类提供 {@link #standard(JButton)} 静态改造方法：把已有的
+ * 除构造函数外，本类提供 standard(JButton) 静态改造方法：把已有的
  * {@code JButton}（通常是 {@code I18n.button(...)} 的返回值，保留其"切语言自动刷新文案"
  * 的订阅）原地套上统一样式（白底深灰字 + 统一字体 + 统一内边距）。这样设置页的
  * 保存 / 测试 / 删除 / 恢复默认等按钮，以及技能页的"添加技能"按钮，都共享同一套观感，
- * 不做任何单独配色区分。</p>
+ * 不做任何单独配色区分。
  */
 public final class RoundedButton extends JButton {
 
@@ -72,11 +70,9 @@ public final class RoundedButton extends JButton {
 
     /**
      * 把配色写入按钮：
-     * <ul>
-     *   <li>FlatLaf（Burp 主题）：style 客户端属性强制背景 / 悬停背景 / 前景色，
-     *       并锁定 hover/pressed 前景色不变、focus 不画外框；</li>
-     *   <li>其它 L&amp;F（如预览环境默认 L&amp;F）：setBackground / setForeground 生效。</li>
-     * </ul>
+     *   FlatLaf（Burp 主题）：style 客户端属性强制背景 / 悬停背景 / 前景色，
+     *       并锁定 hover/pressed 前景色不变、focus 不画外框；
+     *   其它 L&amp;F（如预览环境默认 L&amp;F）：setBackground / setForeground 生效。
      */
     private static void applyColors(JButton button, Color fill, Color hover, Color foreground) {
         button.setFocusPainted(false);

@@ -18,27 +18,25 @@ import java.util.function.Supplier;
 
 /**
  * 提示词构造器：把 Burp 报文（请求 / 请求 + 响应）转换为适合大模型分析的文本，
- * 并负责系统提示词的三级取值：<b>用户自定义（设置界面）→ 资源文件 → 内置兜底</b>。
+ * 并负责系统提示词的三级取值：用户自定义（设置界面）→ 资源文件 → 内置兜底。
  *
- * <p>设计要点：</p>
- * <ul>
- *   <li>系统提示词优先取设置界面保存的自定义内容（{@link Settings#customPrompt()}），
- *       方便用户不重编译地反复调优分析指令；</li>
- *   <li>未自定义时，按当前界面语言从资源文件 {@code /prompts/analyze-traffic_zh.txt} /
- *       {@code /prompts/analyze-traffic_en.txt} 加载默认提示词；</li>
- *   <li>资源文件缺失时回退到对应语言的内置默认提示词，保证扩展始终可用；</li>
- *   <li><b>输出格式后缀同样按语言分文件</b>（{@code output-format_zh/en.txt}、
+ * 设计要点：
+ *   系统提示词优先取设置界面保存的自定义内容（Settings.customPrompt()），
+ *       方便用户不重编译地反复调优分析指令；
+ *   未自定义时，按当前界面语言从资源文件 {@code /prompts/analyze-traffic_zh.txt} /
+ *       {@code /prompts/analyze-traffic_en.txt} 加载默认提示词；
+ *   资源文件缺失时回退到对应语言的内置默认提示词，保证扩展始终可用；
+ *   输出格式后缀同样按语言分文件（{@code output-format_zh/en.txt}、
  *       {@code skill-selection-format_zh/en.txt}），保证"用中文回答/用英文回答"、
- *       段落结构与 JSON 示例在整个 system 段内自洽，不给模型下发互相矛盾的语言指令；</li>
- *   <li><b>技能 = 两层信息架构</b>（参考 Anthropic Skills / OpenAI Function Calling）：
+ *       段落结构与 JSON 示例在整个 system 段内自洽，不给模型下发互相矛盾的语言指令；
+ *   技能 = 两层信息架构（参考 Anthropic Skills / OpenAI Function Calling）：
  *       阶段 1 把"启用的技能"作为可选目录（id + 名称 + 用途）呈现给模型，
  *       模型主动选择要激活的 id；阶段 2 只把模型选中的技能 prompt / userContext
- *       拼到 system / user 段。模型可决定不使用任何技能（直接给 analysis），跳过阶段 2。</li>
- *   <li>用户提示词包含：请求行、请求头（敏感字段脱敏）、请求体（截断）、
- *       响应状态、响应头、响应体（截断）——控制在模型单次可处理的长度内；</li>
- *   <li>2026.7 中 {@code HttpRequest.body()} / {@code HttpResponse.body()} 返回
- *       {@code ByteArray}（字节容器），通过 {@code getBytes()} 取原始字节。</li>
- * </ul>
+ *       拼到 system / user 段。模型可决定不使用任何技能（直接给 analysis），跳过阶段 2。
+ *   用户提示词包含：请求行、请求头（敏感字段脱敏）、请求体（截断）、
+ *       响应状态、响应头、响应体（截断）——控制在模型单次可处理的长度内；
+ *   2026.7 中 {@code HttpRequest.body()} / {@code HttpResponse.body()} 返回
+ *       {@code ByteArray}（字节容器），通过 {@code getBytes()} 取原始字节。
  */
 public final class PromptBuilder {
 
@@ -71,9 +69,9 @@ public final class PromptBuilder {
     /**
      * "可用工具"说明资源（见 {@code prompts/tool-usage_zh.txt} / {@code tool-usage_en.txt}）。
      *
-     * <p>关键作用：告诉模型"何时使用重放工具"。这原本是 {@code replay/SKILL.md} 里的
+     * 关键作用：告诉模型"何时使用重放工具"。这原本是 {@code replay/SKILL.md} 里的
      * {@code description} 字段；现在重放从 skill 提升为常驻能力后，必须由 phase 2
-     * 的 system 段承担"何时用"的触发说明——否则模型会跳过重放、直接给结论。</p>
+     * 的 system 段承担"何时用"的触发说明——否则模型会跳过重放、直接给结论。
      */
     private static final String TOOL_USAGE_RESOURCE_ZH = "/prompts/tool-usage_zh.txt";
     private static final String TOOL_USAGE_RESOURCE_EN = "/prompts/tool-usage_en.txt";
@@ -81,7 +79,7 @@ public final class PromptBuilder {
     /**
      * 工具调用结果回填到 user 段时使用的前缀模板（中英），提示模型"以下是你刚发起
      * 的重放的响应"。占位符 {@code {id}} = 工具调用 id，{@code {ms}} = 耗时（毫秒）。
-     * 见 {@link #buildReplayResultUserPrompt}。
+     * 见 buildReplayResultUserPrompt。
      */
     private static final String REPLAY_RESULT_HEADER_TEMPLATE_ZH =
             "\n【重放结果（tool_call_id={id}，{ms}ms）】\n";
@@ -112,7 +110,7 @@ public final class PromptBuilder {
 
     /**
      * 单轮 / 阶段 2 输出格式后缀（中英成对）：{@code [0]=zh, [1]=en}，按
-     * {@code isEnglish() ? 1 : 0} 索引。资源缺失时回退到 {@link #DEFAULT_OUTPUT_FORMAT_SUFFIX_ZH} / {@link #DEFAULT_OUTPUT_FORMAT_SUFFIX_EN}。
+     * {@code isEnglish() ? 1 : 0} 索引。资源缺失时回退到 DEFAULT_OUTPUT_FORMAT_SUFFIX_ZH / DEFAULT_OUTPUT_FORMAT_SUFFIX_EN。
      */
     private static final String[] OUTPUT_FORMAT_SUFFIX = loadBothLanguages(
             OUTPUT_FORMAT_RESOURCE_ZH, OUTPUT_FORMAT_RESOURCE_EN,
@@ -121,10 +119,10 @@ public final class PromptBuilder {
     /**
      * 阶段 1（技能选择）输出格式后缀的兜底文本：classpath 资源缺失 / 读取失败时使用。
      *
-     * <p><b>为什么必须与单轮兜底分开</b>：阶段 1 的协议字段是 {@code active_skill_ids}，
-     * 而 {@link #DEFAULT_OUTPUT_FORMAT_SUFFIX_ZH} 只讲 analysis/risk/findings。若共用，
+     * 为什么必须与单轮兜底分开：阶段 1 的协议字段是 {@code active_skill_ids}，
+     * 而 DEFAULT_OUTPUT_FORMAT_SUFFIX_ZH 只讲 analysis/risk/findings。若共用，
      * 一旦 {@code skill-selection-format_*.txt} 没打进包，模型就不会输出技能选择字段，
-     * 阶段 1 解析必然失败并退化为"全量启用兜底"——协议与实际下发的提示词脱节。</p>
+     * 阶段 1 解析必然失败并退化为"全量启用兜底"——协议与实际下发的提示词脱节。
      */
     private static final String DEFAULT_SKILL_SELECTION_SUFFIX_ZH =
             "\n\n【输出格式（强制 JSON）】\n1. 你且只能输出一个合法 JSON 对象，不允许包含 JSON 之外的任何文字、Markdown 代码块、注释。\n"
@@ -147,8 +145,8 @@ public final class PromptBuilder {
 
     /**
      * 阶段 1 技能选择输出格式后缀（中英成对）。资源缺失时回退到
-     * {@link #DEFAULT_SKILL_SELECTION_SUFFIX_ZH} / {@link #DEFAULT_SKILL_SELECTION_SUFFIX_EN}
-     * （<b>不能</b>复用单轮兜底：那个不含 {@code active_skill_ids} 协议字段）。
+     * DEFAULT_SKILL_SELECTION_SUFFIX_ZH / DEFAULT_SKILL_SELECTION_SUFFIX_EN
+     * （不能复用单轮兜底：那个不含 {@code active_skill_ids} 协议字段）。
      */
     private static final String[] SKILL_SELECTION_OUTPUT_SUFFIX = loadBothLanguages(
             SKILL_SELECTION_FORMAT_RESOURCE_ZH, SKILL_SELECTION_FORMAT_RESOURCE_EN,
@@ -260,9 +258,9 @@ public final class PromptBuilder {
      * 多技能并行元规则：当阶段 2 实际拼装 system 段时，若被激活的技能数 ≥ 2，
      * 追加到所有 skill 段之后，告知模型多 skill 并行时的 finding 归类约定。
      *
-     * <p>设计动机：每个 skill 的 prompt 现在以"我负责 X 类型发现"的正面声明收尾，
+     * 设计动机：每个 skill 的 prompt 现在以"我负责 X 类型发现"的正面声明收尾，
      * 但只有元规则才能从根本上消解冲突——它要求模型显式带 type 字段、并由对应技能负责。
-     * 单技能场景不会拼这段，避免对简单分析增加无意义噪声。</p>
+     * 单技能场景不会拼这段，避免对简单分析增加无意义噪声。
      */
     private static final String MULTI_SKILL_RULE_ZH =
             """
@@ -386,11 +384,11 @@ public final class PromptBuilder {
 
     /**
      * 同时加载中英两份资源（资源缺失时各自回退到对应语言的 fallback），用于压缩
-     * "中英成对加载"的样板，保留 {@link #loadOrDefault} 作底层。
+     * "中英成对加载"的样板，保留 loadOrDefault 作底层。
      *
-     * <p>必须在 class 初始化阶段调用（不依赖实例），故要求 fallback 都是字面量或
+     * 必须在 class 初始化阶段调用（不依赖实例），故要求 fallback 都是字面量或
      * 已被前面的 static 字段加载的字符串。返回 {@code String[2]{zh, en}}，
-     * 调用方按当前语言取 {@code arr[isEnglish() ? 1 : 0]}。</p>
+     * 调用方按当前语言取 {@code arr[isEnglish() ? 1 : 0]}。
      */
     private static String[] loadBothLanguages(String zhRes, String enRes,
                                               String fallbackZh, String fallbackEn) {
@@ -409,7 +407,7 @@ public final class PromptBuilder {
 
     /**
      * 自定义系统提示词提供方：每次构造系统提示词时实时读取，
-     * 保证用户改完提示词后下一次分析立即生效；用 {@link Supplier}
+     * 保证用户改完提示词后下一次分析立即生效；用 Supplier
      * 而不是直接传 {@code String}，是为了在多配置切换 / 提示词编辑场景下
      * 始终读到最新值（{@code Settings} 对象本身不可见）。
      */
@@ -417,7 +415,7 @@ public final class PromptBuilder {
 
     /**
      * 当前界面语言提供方：调用时实时取，保证用户在"设置"页切语言后下一次分析
-     * 立即按新语言构造 prompt。{@code null} 时取枚举默认值 {@link Lang#ZH}（仅供
+     * 立即按新语言构造 prompt。{@code null} 时取枚举默认值 Lang.ZH（仅供
      * 单测 / 不关心语言切换的内部用法）。
      */
     private final Supplier<Lang> languageSupplier;
@@ -427,7 +425,7 @@ public final class PromptBuilder {
      *
      * @param customPromptSupplier 自定义系统提示词提供方；返回 {@code null} 或空白
      *                             字符串时回退到内置默认。
-     * @param languageSupplier     当前界面语言提供方；{@code null} 时默认取 {@link Lang#ZH}。
+     * @param languageSupplier     当前界面语言提供方；{@code null} 时默认取 Lang.ZH。
      */
     public PromptBuilder(Supplier<String> customPromptSupplier, Supplier<Lang> languageSupplier) {
         this.customPromptSupplier = customPromptSupplier;
@@ -435,7 +433,7 @@ public final class PromptBuilder {
     }
 
     /**
-     * 单参便捷构造器：固定中文（{@link Lang#ZH}）。不关心语言切换的旧用法
+     * 单参便捷构造器：固定中文（Lang.ZH）。不关心语言切换的旧用法
      * （含单测）保留此入口。
      */
     public PromptBuilder(Supplier<String> customPromptSupplier) {
@@ -450,7 +448,7 @@ public final class PromptBuilder {
     /**
      * 构建"无技能"场景下的单次分析系统提示词：基础 + 单轮输出格式后缀。
      *
-     * <p>用于 {@code TrafficAnalyzer} 的"没有任何技能启用"分支——单次调用直接给结论。</p>
+     * 用于 {@code TrafficAnalyzer} 的"没有任何技能启用"分支——单次调用直接给结论。
      */
     public String buildSystemPrompt() {
         return buildBasePrompt() + "\n\n" + outputFormatSuffix();
@@ -460,9 +458,9 @@ public final class PromptBuilder {
      * 构建"阶段 1：技能选择"的系统提示词：基础 + 候选技能目录（id / 名称 / 用途）+
      * 让模型选择激活哪些技能的指令 + 阶段 1 输出格式后缀。
      *
-     * <p>这是"两层信息架构"的描述层——把"有哪些技能可用 + 每个技能做什么"以可读列表
-     * 形式告诉模型，让模型根据当前报文判断激活哪些。注意这里<b>不包含任何技能的
-     * prompt 片段</b>，技能的详细 prompt 留给阶段 2（"内容层"）。</p>
+     * 这是"两层信息架构"的描述层——把"有哪些技能可用 + 每个技能做什么"以可读列表
+     * 形式告诉模型，让模型根据当前报文判断激活哪些。注意这里不包含任何技能的
+     * prompt 片段，技能的详细 prompt 留给阶段 2（"内容层"）。
      *
      * @param candidates 当前启用的技能（即"可选"集），按入参顺序展示
      */
@@ -473,24 +471,22 @@ public final class PromptBuilder {
     /**
      * 构建"阶段 1：技能选择"的系统提示词的完整版：分两段输出——【可选技能】+【必选技能】。
      *
-     * <p>把"普通启用"与"pinned"分到两个独立标题下，避免行尾标签混淆（之前的"（必选）"
+     * 把"普通启用"与"pinned"分到两个独立标题下，避免行尾标签混淆（之前的"（必选）"
      * 后缀被模型误判为普通列表内容，导致必选被漏选）。两个目录各带独立标题 + 选择/必选说明，
-     * 让模型无法把必选技能当成"可挑可不挑"。</p>
+     * 让模型无法把必选技能当成"可挑可不挑"。
      *
-     * <p>为什么不把 pinned 的 prompt 内容也直接拼到 phase 1 system 段：phase 1 是"选 skill"
+     * 为什么不把 pinned 的 prompt 内容也直接拼到 phase 1 system 段：phase 1 是"选 skill"
      * 轮次没有 tool_calls 协议，pinned 的"何时调工具"指令在这一阶段无法执行——让模型"看到"
-     * 完整必选列表（标题 + id/name/用途）即可，prompt 内容留到 phase 2 才生效。</p>
+     * 完整必选列表（标题 + id/name/用途）即可，prompt 内容留到 phase 2 才生效。
      *
-     * <p>拼装结构（自上而下）：</p>
-     * <ol>
-     *   <li>基础提示词（用户自定义 / 资源 / 兜底）；</li>
-     *   <li><b>【可选技能】</b>目录：仅 candidates（普通启用，不含 pinned）——按入参顺序展示；</li>
-     *   <li><b>【必选技能】</b>目录：仅 pinnedSkills——按入参顺序展示，独立的标题避免与
-     *       可选目录混淆；</li>
-     *   <li>选择指令（仅当【可选技能】非空时拼——告诉模型"如何挑"）；</li>
-     *   <li>必选说明（仅当【必选技能】非空时拼——强调必选语义"phase 2 一定会注入"）；</li>
-     *   <li>输出格式后缀（{@code active_skill_ids} 协议字段）。</li>
-     * </ol>
+     * 拼装结构（自上而下）：
+     *   基础提示词（用户自定义 / 资源 / 兜底）；
+     *   【可选技能】目录：仅 candidates（普通启用，不含 pinned）——按入参顺序展示；
+     *   【必选技能】目录：仅 pinnedSkills——按入参顺序展示，独立的标题避免与
+     *       可选目录混淆；
+     *   选择指令（仅当【可选技能】非空时拼——告诉模型"如何挑"）；
+     *   必选说明（仅当【必选技能】非空时拼——强调必选语义"phase 2 一定会注入"）；
+     *   输出格式后缀（{@code active_skill_ids} 协议字段）。
      *
      * @param candidates    普通启用技能集（不含 pinned），按入参顺序展示。
      * @param pinnedSkills  自动激活技能集——独立成段，phase 2 强制注入。
@@ -554,12 +550,10 @@ public final class PromptBuilder {
 
     /**
      * 拼一个技能的目录块（YAML 风格缩进，每字段独占一行）：
-     * <pre>
      * - id: sql-injection
      *   name: SQL 注入
      *   用途: 检测 SQL 注入痕迹
      *   finding type: sqli
-     * </pre>
      * 字段用换行 + 缩进做分隔，避免逗号与字段值内部的顿号 / 逗号混淆；同时中英文版结构完全
      * 统一，消除了标点风格漂移。两段目录（【可选技能】+【必选技能】）共用同一格式——
      * 只靠标题区分必选 vs 可选。
@@ -580,13 +574,13 @@ public final class PromptBuilder {
      * 构建"阶段 2：最终分析"的系统提示词：基础 + 模型选中的技能 prompt 片段（按入参顺序）
      * + 单轮输出格式后缀。
      *
-     * <p>这是"两层信息架构"的内容层——只把模型在阶段 1 选中的技能的具体 prompt 拼到
-     * system 段；未选中的技能不进 prompt，节省 token。</p>
+     * 这是"两层信息架构"的内容层——只把模型在阶段 1 选中的技能的具体 prompt 拼到
+     * system 段；未选中的技能不进 prompt，节省 token。
      *
-     * <p>{@code prompt} 为空的技能会被跳过——一个技能只声明 {@code userContext} 而不写
-     * {@code prompt} 时，不会影响 system 提示词（它的内容会通过 userContext 段注入）。</p>
+     * {@code prompt} 为空的技能会被跳过——一个技能只声明 {@code userContext} 而不写
+     * {@code prompt} 时，不会影响 system 提示词（它的内容会通过 userContext 段注入）。
      *
-     * @param selectedSkills 模型在阶段 1 选中的技能列表；为空时等同于 {@link #buildSystemPrompt()}。
+     * @param selectedSkills 模型在阶段 1 选中的技能列表；为空时等同于 buildSystemPrompt()。
      */
     public String buildSystemPromptWithSelectedSkills(List<Skill> selectedSkills) {
         boolean en = isEnglish();
@@ -621,15 +615,13 @@ public final class PromptBuilder {
     /**
      * 构建"重放"模式的系统提示词：基础 + 启用的技能 prompt 片段 + "重放"模式输出格式后缀。
      *
-     * <p>与 {@link #buildSystemPromptWithSelectedSkills} 的差别是：</p>
-     * <ul>
-     *   <li>输出格式后缀换成"含 {@code tool_calls}"的版本，让模型在多轮循环里能
-     *       选择"再发一次"或"收尾给结论"；</li>
-     *   <li>多技能并行元规则仍然生效——"重放"不是单技能独占场景，模型可能同时配合
-     *       SQL 注入 / 鉴权绕过等其它技能做重放验证；</li>
-     *   <li>"重放"技能的 prompt 里已经写明"重放请求"工具的调用协议，所以这里不再
-     *       重复写一段，遵循"技能声明 = 单一信息源"的原则。</li>
-     * </ul>
+     * 与 buildSystemPromptWithSelectedSkills 的差别是：
+     *   输出格式后缀换成"含 {@code tool_calls}"的版本，让模型在多轮循环里能
+     *       选择"再发一次"或"收尾给结论"；
+     *   多技能并行元规则仍然生效——"重放"不是单技能独占场景，模型可能同时配合
+     *       SQL 注入 / 鉴权绕过等其它技能做重放验证；
+     *   "重放"技能的 prompt 里已经写明"重放请求"工具的调用协议，所以这里不再
+     *       重复写一段，遵循"技能声明 = 单一信息源"的原则。
      *
      * @param selectedSkills 启用的技能列表（含"重放"技能时本方法才被调用）。
      * @param remainingBudget 剩余重放预算（0～3），用于在 system 段里向模型汇报"你还能调用 N 次"。
@@ -677,8 +669,8 @@ public final class PromptBuilder {
     /**
      * 把一次"重放"工具调用的结果回填到 user 段。
      *
-     * <p>模型在看到这条 user 消息时，能立即定位"我刚才发起的那个 tool_call 的响应
-     * 在这里"——避免它在多轮上下文里把"重放 A 的响应"和"重放 B 的响应"搞混。</p>
+     * 模型在看到这条 user 消息时，能立即定位"我刚才发起的那个 tool_call 的响应
+     * 在这里"——避免它在多轮上下文里把"重放 A 的响应"和"重放 B 的响应"搞混。
      *
      * @param toolCallId  本次重放对应的工具调用标识（与解析时构造的 id 对齐）。
      * @param result      重放执行结果。
@@ -731,13 +723,13 @@ sb.append(en ? "[Response]\n" : "[响应]\n")
      * {@code replay_request} 时 key 必须从原请求"可替换参数"清单里选，
      * 否则会被服务端拒绝并浪费预算。
      *
-     * <p>把这段 if-else 集中在本类内，{@code ToolLoopOrchestrator} 只负责
+     * 把这段 if-else 集中在本类内，{@code ToolLoopOrchestrator} 只负责
      * 决定"是否要追加 guard + 清单"，文案 / 标点 / 语言分支一律走
-     * {@link PromptBuilder}——避免工具调度器感知语言细节。</p>
+     * PromptBuilder——避免工具调度器感知语言细节。
      *
-     * <p>该方法不感知"清单是否为空"：是否真的需要插入 guard 由调用方按
+     * 该方法不感知"清单是否为空"：是否真的需要插入 guard 由调用方按
      * {@code addrParams.isEmpty()} 决定，避免空清单时仍追加一段无意义
-     * 提示打扰模型。</p>
+     * 提示打扰模型。
      *
      * @return 醒目前缀，按当前 UI 语言分中英两版。
      */
@@ -758,7 +750,7 @@ sb.append(en ? "[Response]\n" : "[响应]\n")
     /**
      * 追加"预算耗尽"的终止信号到 user 段：在第 4 次请求到达时插入。
      *
-     * <p>模型必须立即收尾（哪怕只给"高度疑似"也得给结论），不允许再发起任何 tool_call。</p>
+     * 模型必须立即收尾（哪怕只给"高度疑似"也得给结论），不允许再发起任何 tool_call。
      */
     public String buildBudgetExhaustedUserPrompt(int usedBudget) {
         boolean en = isEnglish();
@@ -774,7 +766,7 @@ sb.append(en ? "[Response]\n" : "[响应]\n")
     }
 
     /**
-     * 按当前语言取"重放"模式输出格式后缀。供 {@link #buildSystemPromptForReplay} 调用，
+     * 按当前语言取"重放"模式输出格式后缀。供 buildSystemPromptForReplay 调用，
      * 公开以便测试断言。
      */
     public String replayOutputFormatSuffix() {
@@ -802,7 +794,7 @@ sb.append(en ? "[Response]\n" : "[响应]\n")
 
     /**
      * 按指定语言构建默认系统提示词。先尝试对应语言资源文件 → 旧版单文件 →
-     * 语言感知内置兜底。供 {@link #buildDefaultSystemPrompt()} 和外部测试使用。
+     * 语言感知内置兜底。供 buildDefaultSystemPrompt() 和外部测试使用。
      */
     public String buildDefaultSystemPrompt(Lang lang) {
         String primary = (lang == Lang.EN) ? PROMPT_RESOURCE_EN : PROMPT_RESOURCE_ZH;
@@ -865,17 +857,15 @@ sb.append(en ? "[Response]\n" : "[响应]\n")
     /**
      * 构建"调试版"用户提示词：用于 {@code TrafficAnalyzer} 的 DEBUG 日志。
      *
-     * <p>与 {@link #buildUserPrompt} 的差异：</p>
-     * <ul>
-     *   <li>请求 / 响应头：不再逐条展开，统一占位成一行 {@code （请求头：略...）}
-     *       / {@code （响应头：略...）}，避免日志里漏出 Authorization / Cookie 等；</li>
-     *   <li>请求 / 响应体：不输出正文，只输出一行占位文本
-     *       {@code （请求体/响应体：N字节）}——保留体积信息、便于核对"为什么 prompt 那么大"；</li>
-     *   <li>响应状态码：DEBUG 日志里不打印（排查状态码用 Burp HTTP 历史更直接）。</li>
-     * </ul>
+     * 与 buildUserPrompt 的差异：
+     *   请求 / 响应头：不再逐条展开，统一占位成一行 {@code （请求头：略...）}
+     *       / {@code （响应头：略...）}，避免日志里漏出 Authorization / Cookie 等；
+     *   请求 / 响应体：不输出正文，只输出一行占位文本
+     *       {@code （请求体/响应体：N字节）}——保留体积信息、便于核对"为什么 prompt 那么大"；
+     *   响应状态码：DEBUG 日志里不打印（排查状态码用 Burp HTTP 历史更直接）。
      *
-     * <p><b>本方法只影响 DEBUG 日志打印，不影响真实发送给模型的报文</b>——
-     * 真实发送仍走 {@link #buildUserPrompt}，原文 / 头 / 体 / 状态码全量到位。</p>
+     * 本方法只影响 DEBUG 日志打印，不影响真实发送给模型的报文——
+     * 真实发送仍走 buildUserPrompt，原文 / 头 / 体 / 状态码全量到位。
      */
     public String buildUserPromptDebug(HttpRequest request, HttpResponse response) {
         // 走"完整版 → 压缩版"路径：与阶段 2 的 compactMessageText 共用同一压缩器，

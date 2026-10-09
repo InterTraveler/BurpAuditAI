@@ -16,8 +16,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * {@link SettingsStore} 单元测试：JSON 序列化、新格式读写、v0.2 旧键迁移、出厂默认。
  *
- * <p>使用 {@link InMemoryPreferences} 桩，避免对 Montoya API 的真实依赖；其读写语义
- * 与 Montoya {@code Preferences} 一致：读不到返回 {@code null}，写入按键覆盖。</p>
+ * 使用 {@link InMemoryPreferences} 桩，避免对 Montoya API 的真实依赖；其读写语义
+ * 与 Montoya {@code Preferences} 一致：读不到返回 {@code null}，写入按键覆盖。
  */
 final class SettingsStoreTest {
 

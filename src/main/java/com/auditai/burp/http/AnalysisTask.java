@@ -6,16 +6,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * 一次<b>可取消</b>的分析任务句柄（由 {@link TrafficAnalyzer#analyzeAsync} 返回）。
+ * 一次可取消的分析任务句柄（由 TrafficAnalyzer.analyzeAsync 返回）。
  *
- * <p>每个页签持有自己当前任务的句柄：</p>
- * <ul>
- *   <li>任务<b>还在排队</b>（尚未开始）：调用 {@link #cancel()} 置取消标志，
- *       任务真正运行时检测到标志会直接放弃，不调用 AI；</li>
- *   <li>任务<b>正在执行</b>（AI 请求进行中）：调用 {@link #cancel()} 会中断底层
- *       HTTP 请求（{@link CancellableAiCall#cancel()}）；</li>
- *   <li>不同页签持有各自的任务句柄，取消互不影响。</li>
- * </ul>
+ * 每个页签持有自己当前任务的句柄：
+ *   任务还在排队（尚未开始）：调用 cancel() 置取消标志，
+ *       任务真正运行时检测到标志会直接放弃，不调用 AI；
+ *   任务正在执行（AI 请求进行中）：调用 cancel() 会中断底层
+ *       HTTP 请求（CancellableAiCall.cancel()）；
+ *   不同页签持有各自的任务句柄，取消互不影响。
  */
 public final class AnalysisTask implements Runnable {
 

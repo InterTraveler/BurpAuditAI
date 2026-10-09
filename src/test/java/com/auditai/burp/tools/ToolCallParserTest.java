@@ -10,13 +10,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * {@link ToolCallParser} 的单元测试。
  *
- * <p>重点覆盖（解析器现在是通用的，支持任意 tool name）：</p>
- * <ul>
- *   <li>任意 tool_name（含 "replay_request" / "brute_force" 等）都能正确解析；</li>
- *   <li>arguments JSON 原样传给工具（解析器不解析 tool-specific schema）；</li>
- *   <li>容错：模型输出 markdown 围栏 / 缺字段 / 缺 name 时不抛错；</li>
- *   <li>非数组 tool_calls / 完全不是 JSON 时返回 empty 不抛异常。</li>
- * </ul>
+ * 重点覆盖（解析器现在是通用的，支持任意 tool name）：
+ *   任意 tool_name（含 "replay_request" / "brute_force" 等）都能正确解析；
+ *   arguments JSON 原样传给工具（解析器不解析 tool-specific schema）；
+ *   容错：模型输出 markdown 围栏 / 缺字段 / 缺 name 时不抛错；
+ *   非数组 tool_calls / 完全不是 JSON 时返回 empty 不抛异常。
  */
 class ToolCallParserTest {
 

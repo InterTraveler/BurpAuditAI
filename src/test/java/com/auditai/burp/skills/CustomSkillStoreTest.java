@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 覆盖安装（成功 / id 不合法 / SKILL.md 内容不合法 / 冲突处理）、
  * 卸载（成功 / 不存在的 id）、id 校验、文件名 → id 推导。
  *
- * <p>每个用例都在临时目录上构造 {@code <id>/SKILL.md}，避免依赖 Burp 运行环境。</p>
+ * 每个用例都在临时目录上构造 {@code <id>/SKILL.md}，避免依赖 Burp 运行环境。
  */
 class CustomSkillStoreTest {
 
@@ -140,9 +140,9 @@ class CustomSkillStoreTest {
 
     /** suggestIdFromFile：去掉后缀、小写、空格替为 '-'、首字符保证合法。
  *
- * <p>注意：suggestIdFromFile 与 suggestIdFromName 行为不同——前者基于文件名（小写 + 收紧），
+ * 注意：suggestIdFromFile 与 suggestIdFromName 行为不同——前者基于文件名（小写 + 收紧），
  * 后者基于 SKILL.md 的 name 字段（保留原 case + 允许空格/中文）。当前 UI 路径只走
- * suggestIdFromName，本方法保留供未来"未解析 SKILL.md 前"使用。</p>
+ * suggestIdFromName，本方法保留供未来"未解析 SKILL.md 前"使用。
  */
     @Test
     void suggestIdFromFileSanitizesSpecialCharacters() {

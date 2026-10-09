@@ -3,7 +3,7 @@ package com.auditai.burp.skills;
 /**
  * 技能来源标签：决定 UI 上的视觉分组与"卸载"权限。
  *
- * <p>同名 ID 在 BUILTIN 和 USER 都出现时，SkillLoader 让 USER 覆盖 BUILTIN。</p>
+ * 同名 ID 在 BUILTIN 和 USER 都出现时，SkillLoader 让 USER 覆盖 BUILTIN。
  */
 public enum SkillSource {
 

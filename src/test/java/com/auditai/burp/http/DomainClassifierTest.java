@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * {@link DomainClassifier} 单元测试：覆盖 Javadoc 列出的全部示例 + null / 空白 /
  * 含端口 / IPv4 / IPv6 等边界。
  *
- * <p>纯函数测试，不依赖 Burp 运行时。</p>
+ * 纯函数测试，不依赖 Burp 运行时。
  */
 final class DomainClassifierTest {
 

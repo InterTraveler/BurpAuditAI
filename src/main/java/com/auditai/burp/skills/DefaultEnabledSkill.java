@@ -4,20 +4,20 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 /**
- * 用户<b>首次安装</b> AuditAI 时默认启用的技能白名单。
+ * 用户首次安装 AuditAI 时默认启用的技能白名单。
  *
- * <p>设计意图：插件一上来不要"啥都没开"，挑几个新手最常用、最有价值的技能默认开启，
- * 让用户立刻能看到 SKILLS 页签启用态的差异；其余技能留给用户在页签里手动启用。</p>
+ * 设计意图：插件一上来不要"啥都没开"，挑几个新手最常用、最有价值的技能默认开启，
+ * 让用户立刻能看到 SKILLS 页签启用态的差异；其余技能留给用户在页签里手动启用。
  *
- * <p><b>生效范围</b>：本枚举里的 id 只在用户<b>从未持久化过技能状态</b>时生效
+ * 生效范围：本枚举里的 id 只在用户从未持久化过技能状态时生效
  * （即首次安装）。一旦用户在 UI 里点过"启用 / 禁用"，后续启动完全由持久化数据
  * 决定，本枚举不会"覆盖"用户的选择——避免用户辛苦调好的状态被某次升级
- * 重置回默认值。</p>
+ * 重置回默认值。
  *
- * <p><b>添加新条目</b>：仅当 {@code src/main/resources/skills/}
+ * 添加新条目：仅当 {@code src/main/resources/skills/}
  * （或约定的子目录 {@code skills/vuln/}、{@code skills/auxiliary/}）下
  * 确实有同名 {@code <id>/SKILL.md} 时再加进去；加载器找不到对应文件时会
- * 自动跳过，不会报错（参见 {@link SkillLoader#load}）。</p>
+ * 自动跳过，不会报错（参见 {@link SkillLoader#load}）。
  */
 public enum DefaultEnabledSkill {
 
@@ -71,7 +71,7 @@ public enum DefaultEnabledSkill {
     /**
      * 当前枚举值对应的所有技能 id（不可变快照，按枚举声明顺序）。
      *
-     * <p>返回的是新集合，调用方修改不会影响枚举内部状态。</p>
+     * 返回的是新集合，调用方修改不会影响枚举内部状态。
      */
     public static Set<String> ids() {
         Set<String> result = new LinkedHashSet<>();

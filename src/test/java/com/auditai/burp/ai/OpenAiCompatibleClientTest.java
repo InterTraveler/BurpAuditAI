@@ -19,12 +19,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@link OpenAiCompatibleClient} 的纯逻辑单元测试：端点拼接、超时夹取、
  * API Key 校验与前置校验。
  *
- * <p>为什么这些用例必须存在：历史实现里 {@code baseUrl.replace("/+$", "")} 把正则当字面量，
- * 带尾斜杠的 baseUrl 会请求到 {@code //chat/completions}，而本类此前<b>没有任何单测</b>，
- * 缺陷因此长期存活。这里全部只断言不依赖网络的构造期行为（不发真实请求）。</p>
+ * 为什么这些用例必须存在：历史实现里 {@code baseUrl.replace("/+$", "")} 把正则当字面量，
+ * 带尾斜杠的 baseUrl 会请求到 {@code //chat/completions}，而本类此前没有任何单测，
+ * 缺陷因此长期存活。这里全部只断言不依赖网络的构造期行为（不发真实请求）。
  *
- * <p>{@code buildChatRequest} 走 JDK {@code HttpRequest.newBuilder} 单测可覆盖；
- * 真实网络路径走 {@code httpClient.sendAsync}，需集成测试。</p>
+ * {@code buildChatRequest} 走 JDK {@code HttpRequest.newBuilder} 单测可覆盖；
+ * 真实网络路径走 {@code httpClient.sendAsync}，需集成测试。
  */
 final class OpenAiCompatibleClientTest {
 

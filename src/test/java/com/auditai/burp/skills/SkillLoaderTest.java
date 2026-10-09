@@ -16,8 +16,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * {@link SkillLoader} 的单元测试。
  *
- * <p>所有用例都在临时目录上构造 {@code <id>/SKILL.md} 文件，避免依赖插件内置的
- * classpath 资源（Hello World 技能），保证测试对文件内容的变化免疫。</p>
+ * 所有用例都在临时目录上构造 {@code <id>/SKILL.md} 文件，避免依赖插件内置的
+ * classpath 资源（Hello World 技能），保证测试对文件内容的变化免疫。
  */
 class SkillLoaderTest {
 
@@ -149,8 +149,8 @@ class SkillLoaderTest {
     /**
      * 验证多个技能按 {@code id}（目录名）字典序排序，跟 {@code name} 的字面顺序无关。
      *
-     * <p>测试用例故意把 {@code name} 写成与目录名不同的字母序——如果实现误回退到按 {@code name}
-     * 排序，这个测试会立刻挂掉。</p>
+     * 测试用例故意把 {@code name} 写成与目录名不同的字母序——如果实现误回退到按 {@code name}
+     * 排序，这个测试会立刻挂掉。
      */
     @Test
     void sortsByIdIgnoringName() throws Exception {
@@ -210,9 +210,9 @@ class SkillLoaderTest {
      * 验证 frontmatter 闭合 {@code ---} 之后的 body 里若再出现独立成行的 {@code ---}
      * （Markdown 水平线的写法），不会被再次识别为闭合——body 内容会被原样保留。
      *
-     * <p>实现细节：parseSkillMd 在检测到第一个 {@code ---} 闭合后立即 {@code break} 出循环，
+     * 实现细节：parseSkillMd 在检测到第一个 {@code ---} 闭合后立即 {@code break} 出循环，
      *   不再继续扫描；body 直接 {@code content.substring(pos)} 截取。所以 body 里
-     *   出现的 {@code ---} 不会影响 frontmatter 解析，也不会被剥掉。</p>
+     *   出现的 {@code ---} 不会影响 frontmatter 解析，也不会被剥掉。
      */
     @Test
     void promptBodyContainingStandaloneDashesIsPreserved() throws Exception {
@@ -258,8 +258,8 @@ class SkillLoaderTest {
      * 首次安装 / 用户从未导入过技能时目录可能尚未创建；之后用户首次"添加技能"
      * 会把目录建出来，若 reload() 找不到这条 Root 就永远扫不到用户技能。
      *
-     * <p>测试方案：先确认目录不存在时 load() 不抛错且无 USER 技能；然后创建目录并
-     * 放入 SKILL.md，验证后续 load() 能扫到该技能且标记为 USER。</p>
+     * 测试方案：先确认目录不存在时 load() 不抛错且无 USER 技能；然后创建目录并
+     * 放入 SKILL.md，验证后续 load() 能扫到该技能且标记为 USER。
      */
     @Test
     void fromClasspathAndUserDirectoryRegistersUserRootEvenWhenDirMissing() throws Exception {
@@ -339,11 +339,11 @@ class SkillLoaderTest {
 
     /** 用户版与内置版同名时：用户版覆盖内置版（用户意图明确）。
      *
-     * <p>本测试用 {@link SkillLoader#fromClasspathAndUserDirectory} 模拟生产环境：
+     * 本测试用 {@link SkillLoader#fromClasspathAndUserDirectory} 模拟生产环境：
      * 内置来源用一个不存在的 classpath 路径（保证扫不到任何内置技能），
      * 然后用 {@link SkillLoader#fromDirectory} + {@link SkillLoader#fromUserDirectory}
      * 两个独立加载器分别收集两边，最后手工合并模拟覆盖逻辑——和 SkillLoader.collect()
-     * 内部的 "BUILTIN + USER → USER 覆盖 BUILTIN" 分支等价。</p>
+     * 内部的 "BUILTIN + USER → USER 覆盖 BUILTIN" 分支等价。
      */
     @Test
     void userSkillOverridesBuiltInSkillWithSameId() throws Exception {

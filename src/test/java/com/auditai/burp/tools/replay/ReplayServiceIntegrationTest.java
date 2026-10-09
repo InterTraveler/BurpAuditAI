@@ -35,12 +35,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 用 {@link java.net.http.HttpClient} 真发 HTTP 请求，验证"按位置分类的参数替换"在线上
  * 真的能命中目标 key、并且请求 / 响应信息打到控制台方便人对照查看。
  *
- * <p>为什么不用 {@code ReplayService.execute} 直接发？因为它内部走的是
+ * 为什么不用 {@code ReplayService.execute} 直接发？因为它内部走的是
  * {@code api.http().sendRequest(req)}（Burp Montoya API）——脱离 Burp 跑不动。
  * 这里用 {@link ReplaySimulator} 把"按位置分类"这套语义在 String/Map 层重放一遍，
- * 然后用 JDK 自带 HTTP 客户端发出去——验证的是<b>行为契约</b>（URL 编码、Content-Length、
+ * 然后用 JDK 自带 HTTP 客户端发出去——验证的是行为契约（URL 编码、Content-Length、
  * JSON 编码等），不是某段 Java 代码的内部细节。{@link ReplayServiceTest} 里的单测
- * 负责覆盖{@code ReplayService} 本身的实现逻辑。</p>
+ * 负责覆盖{@code ReplayService} 本身的实现逻辑。
  */
 class ReplayServiceIntegrationTest {
 
@@ -105,7 +105,7 @@ class ReplayServiceIntegrationTest {
     }
 
     /**
-     * 改 JSON body 的<b>嵌套字段</b> {@code user.id}（点号路径）。验证：嵌套结构
+     * 改 JSON body 的嵌套字段 {@code user.id}（点号路径）。验证：嵌套结构
      * 里的字段能被准确定位和替换；同级的 {@code user.name} 不受影响。
      * 典型场景：复杂 JSON 结构里的鉴权字段绕过。
      */
@@ -234,10 +234,10 @@ class ReplayServiceIntegrationTest {
     }
 
     /**
-     * <b>负面</b>：模型把 {@code ?id=1} 的 {@code id} 错放进 {@code replace_header_params}。
+     * 负面：模型把 {@code ?id=1} 的 {@code id} 错放进 {@code replace_header_params}。
      * 验证：本地立刻抛 IAE，不会"成功发请求"；错误信息明确指出"哪个分类、哪个 key"
      * 以及正确位置（{@code query}）实际有哪些 key 可用——帮模型自我修正。
-     * <p>这是 v3 协议的核心改进：杜绝 v2 的"key 撞名 → 优先级兜底"导致的静默错改。</p>
+     * 这是 v3 协议的核心改进：杜绝 v2 的"key 撞名 → 优先级兜底"导致的静默错改。
      */
     @Test
     void wrongPosition_queryKeyInHeaderSlot_failsLocally() {
@@ -268,7 +268,7 @@ class ReplayServiceIntegrationTest {
     }
 
     /**
-     * <b>基线</b>：5 个 map 全空 → 实际就是把原请求原样重发（虽然语义上无意义，
+     * 基线：5 个 map 全空 → 实际就是把原请求原样重发（虽然语义上无意义，
      * 验证工具至少能跑通）。{@link ReplayTool#execute} 会提前用 {@code hasReplacements()}
      * 拦下这种情况并报错"必须至少填一个分类"；这里是直接调 {@code toJdkRequest}
      * 验证底层构造逻辑。
@@ -304,7 +304,6 @@ class ReplayServiceIntegrationTest {
     /**
      * 把"用例场景"打出来——含原请求、reason、5 类替换参数，模拟模型在 tool_calls 里
      * 提交的 arguments 视角。打印格式：
-     * <pre>
      * ====== [testName] 用例场景 ======
      * 原请求: GET /api?id=1
      * 模型 arguments:
@@ -317,7 +316,6 @@ class ReplayServiceIntegrationTest {
      *     "replace_path_params":   {  }
      *   }
      * ======
-     * </pre>
      */
     private static void printScenario(String testName, String originalLine, String reason,
                                       Map<String, String> queryParams,
@@ -509,15 +507,13 @@ class ReplayServiceIntegrationTest {
     /**
      * 模拟 ReplayService 的"按位置分类"替换语义，跑在 String/Map 层（不依赖 Burp）。
      *
-     * <p>行为契约：</p>
-     * <ul>
-     *   <li>replace_query_params：改 query string，URL 编码新值</li>
-     *   <li>replace_form_params：改 form-encoded body，URL 编码新值</li>
-     *   <li>replace_header_params：改请求头（大小写不敏感），值保持原样</li>
-     *   <li>replace_json_params：改 JSON body 字段（支持点号路径），值 JSON 编码</li>
-     *   <li>replace_path_params：改 path 的最后一段非空段（如 /api/users/123 → 改 123），
-     *       要求 path-only（无 ?query）、路径至少 2 段；只接受虚拟 key "path"</li>
-     * </ul>
+     * 行为契约：
+     *   replace_query_params：改 query string，URL 编码新值
+     *   replace_form_params：改 form-encoded body，URL 编码新值
+     *   replace_header_params：改请求头（大小写不敏感），值保持原样
+     *   replace_json_params：改 JSON body 字段（支持点号路径），值 JSON 编码
+     *   replace_path_params：改 path 的最后一段非空段（如 /api/users/123 → 改 123），
+     *       要求 path-only（无 ?query）、路径至少 2 段；只接受虚拟 key "path"
      */
     static class ReplaySimulator {
         private final String method;

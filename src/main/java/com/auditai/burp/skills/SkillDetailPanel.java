@@ -32,16 +32,14 @@ import java.io.Serial;
  * 单个技能的详情视图：取代原 {@code JOptionPane} 弹框，
  * 切换到与技能列表同级的新界面，左上角带"返回"按钮回到原列表。
  *
- * <p>布局：</p>
- * <ul>
- *   <li>顶部工具栏：左上角"← 返回"按钮，点击后通过 {@code onBack} 回调切回列表；</li>
- *   <li>头部：技能图标（左侧大号方块）+ 技能名 + id；</li>
- *   <li>正文（可滚动）：描述、System prompt、User context、历史摘要条数 等所有可用字段，
- *       无内容的字段自动隐藏对应区块。</li>
- * </ul>
+ * 布局：
+ *   顶部工具栏：左上角"← 返回"按钮，点击后通过 {@code onBack} 回调切回列表；
+ *   头部：技能图标（左侧大号方块）+ 技能名 + id；
+ *   正文（可滚动）：描述、System prompt、User context、历史摘要条数 等所有可用字段，
+ *       无内容的字段自动隐藏对应区块。
  *
- * <p>可滚动正文的存在让超长 prompt / description 不会撑爆界面，
- * 同时保持列表页的标题栏 / 状态栏位置不变（它们属于"列表卡"，本面板不持有）。</p>
+ * 可滚动正文的存在让超长 prompt / description 不会撑爆界面，
+ * 同时保持列表页的标题栏 / 状态栏位置不变（它们属于"列表卡"，本面板不持有）。
  */
 public final class SkillDetailPanel extends JPanel implements LocaleAware {
 
@@ -98,12 +96,12 @@ public final class SkillDetailPanel extends JPanel implements LocaleAware {
     /**
      * 构建胶囊样式的"返回"按钮：白底 + 浅灰描边 + 圆角，hover 变浅蓝/灰、pressed 稍深。
      *
-     * <p>视觉参考：白底卡片式导航按钮（← 箭头 + "返回"文字），
-     * 颜色克制、圆角较小（≈8px），整体风格接近 Notion / Linear 导航 chip。</p>
+     * 视觉参考：白底卡片式导航按钮（← 箭头 + "返回"文字），
+     * 颜色克制、圆角较小（≈8px），整体风格接近 Notion / Linear 导航 chip。
      *
-     * <p>实现说明：用 {@link BasicButtonUI} 替换默认矩形背景绘制，仅接管背景与描边，
+     * 实现说明：用 BasicButtonUI 替换默认矩形背景绘制，仅接管背景与描边，
      * 文字/icon 仍走主题渲染——这样在 Burp 主题（FlatLaf）和预览环境（默认 L&F）
-     * 下都能呈现一致的圆角效果，不会被 L&F 强制覆盖。</p>
+     * 下都能呈现一致的圆角效果，不会被 L&F 强制覆盖。
      */
     private JButton createBackButton(Runnable onBack) {
         final Color defaultBg = new Color(255, 255, 255);
@@ -234,7 +232,7 @@ public final class SkillDetailPanel extends JPanel implements LocaleAware {
 
     /**
      * 正文：垂直堆叠若干 section；空字段不渲染。
-     * 使用 {@link JTextArea}（只读、带背景）而非 JLabel+HTML：渲染稳定、不依赖 HTML
+     * 使用 JTextArea（只读、带背景）而非 JLabel+HTML：渲染稳定、不依赖 HTML
      * 解析器，且能完美支持多行 / 长串换行。
      */
     private JPanel buildBody(Skill skill) {

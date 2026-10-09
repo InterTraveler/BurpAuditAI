@@ -18,25 +18,21 @@ import java.util.Map;
 /**
  * Burp 报文极致压缩器：把请求/响应压缩为适合批量喂给大模型的极简文本。
  *
- * <p>与 {@link TextUtil} 的定位差异：</p>
- * <ul>
- *   <li>{@code TextUtil} 服务"单报文 + 可读"（供 {@code PromptBuilder} 做单次分析），保留头名+少量值；</li>
- *   <li>{@code TrafficCompactor} 服务"批量报文 + 极致压缩"（上下文紧张时同时塞多条记录），
- *       非敏感头 value 仅保留前 5 字符，JSON 进一步裁剪到 key/value/数组/深度多维度阈值。</li>
- * </ul>
+ * 与 TextUtil 的定位差异：
+ *   {@code TextUtil} 服务"单报文 + 可读"（供 {@code PromptBuilder} 做单次分析），保留头名+少量值；
+ *   {@code TrafficCompactor} 服务"批量报文 + 极致压缩"（上下文紧张时同时塞多条记录），
+ *       非敏感头 value 仅保留前 5 字符，JSON 进一步裁剪到 key/value/数组/深度多维度阈值。
  *
- * <p><b>共享复用：</b>敏感头判定直接复用 {@link TextUtil#isSensitiveHeader(String)}，
- * 二进制嗅探直接复用 {@link TextUtil#isLikelyBinary(byte[])}，
- * 避免策略在两处独立维护导致漂移。</p>
+ * 共享复用：敏感头判定直接复用 TextUtil.isSensitiveHeader(String)，
+ * 二进制嗅探直接复用 TextUtil.isLikelyBinary(byte[])，
+ * 避免策略在两处独立维护导致漂移。
  *
- * <p><b>设计原则：</b></p>
- * <ul>
- *   <li>解析失败一律回退到"截断纯文本"路径，单条坏数据不能拖垮整批；</li>
- *   <li>JSON 重新序列化时关闭 HTML 转义（{@code disableHtmlEscaping}），
- *       避免 {@code =}、{@code <}、{@code >} 被转成 {@code \u003d} 等冗长形式；</li>
- *   <li>嵌套深度硬上限，防止恶意超深 JSON 爆栈；</li>
- *   <li>输出整体走"两行缩进 + 段落分隔"风格，模型解析时结构清晰。</li>
- * </ul>
+ * 设计原则：
+ *   解析失败一律回退到"截断纯文本"路径，单条坏数据不能拖垮整批；
+ *   JSON 重新序列化时关闭 HTML 转义（{@code disableHtmlEscaping}），
+ *       避免 {@code =}、{@code <}、{@code >} 被转成 {@code \u003d} 等冗长形式；
+ *   嵌套深度硬上限，防止恶意超深 JSON 爆栈；
+ *   输出整体走"两行缩进 + 段落分隔"风格，模型解析时结构清晰。
  */
 public final class TrafficCompactor {
 
@@ -130,17 +126,15 @@ public final class TrafficCompactor {
     /**
      * 压缩"完整 HTTP 请求"原始字节（含请求行 + headers + 可选 body）。
      *
-     * <p>用途：不依赖 Montoya 的"完整报文 → 极致压缩"入口——调用方持有可能来自磁盘 /
+     * 用途：不依赖 Montoya 的"完整报文 → 极致压缩"入口——调用方持有可能来自磁盘 /
      * 网络抓包的纯字节（典型场景：{@code ProxyTrafficStore.StoredTraffic#readRequest()}），
-     * 由本方法自行解析请求行、headers、body，再走统一的"极致压缩"策略。</p>
+     * 由本方法自行解析请求行、headers、body，再走统一的"极致压缩"策略。
      *
-     * <p>输出格式：
-     * <pre>
+     * 输出格式：
      * 【请求】METHOD URL
      *   Header-Name: value（前 5 字符；敏感头显示"（已脱敏）"）
      *   [Body N 字节]
      *   {compactBody 输出}
-     * </pre>
      *
      * @param rawRequest 完整 HTTP 请求字节（可为 null/空；为 null/空时返回空串）。
      * @return 压缩后的可读字符串。
@@ -155,8 +149,8 @@ public final class TrafficCompactor {
     /**
      * 压缩"完整 HTTP 响应"原始字节（含状态行 + headers + 可选 body）。
      *
-     * <p>解析策略、压缩策略、输出格式与请求版本完全对齐——把首行视为
-     * {@code HTTP/1.1 STATUS REASON} 拆出 STATUS 单独展示。</p>
+     * 解析策略、压缩策略、输出格式与请求版本完全对齐——把首行视为
+     * {@code HTTP/1.1 STATUS REASON} 拆出 STATUS 单独展示。
      *
      * @param rawResponse 完整 HTTP 响应字节（可为 null/空；为 null/空时返回空串）。
      * @return 压缩后的可读字符串。
@@ -172,10 +166,10 @@ public final class TrafficCompactor {
      * 压缩"完整 HTTP 请求 + 响应"原始字节对：多报文协同分析（多报文摘要）
      * 的核心入口。任一为空时输出对应占位提示，仍保持输出结构稳定。
      *
-     * <p>典型调用方：{@code TrafficAnalyzer} 在同域历史摘要阶段，遍历
+     * 典型调用方：{@code TrafficAnalyzer} 在同域历史摘要阶段，遍历
      * {@code ProxyTrafficStore} 取到的多条历史记录，逐一调用本方法把每条
      * 历史的"完整请求 + 响应"压缩为"几百字节级别的可读摘要"，再拼到
-     * 阶段 2 的 user 段里供模型参考。</p>
+     * 阶段 2 的 user 段里供模型参考。
      */
     public static String compactRawPair(byte[] rawRequest, byte[] rawResponse) {
         StringBuilder sb = new StringBuilder(1024);
@@ -256,12 +250,10 @@ public final class TrafficCompactor {
     /**
      * 在整段原始 HTTP 字节中寻找 header / body 分隔符：优先 {@code \r\n\r\n}，
      * 兜底 {@code \n\n}。返回 {@code int[2]}：
-     * <ul>
-     *   <li>{@code [0]} = 分隔符起始位置（-1 表示未找到）；</li>
-     *   <li>{@code [1]} = 分隔符自身占用的字节数（{@code \r\n\r\n}=4，{@code \n\n}=2），
+     *   {@code [0]} = 分隔符起始位置（-1 表示未找到）；
+     *   {@code [1]} = 分隔符自身占用的字节数（{@code \r\n\r\n}=4，{@code \n\n}=2），
      *       配合 {@code [0]} 即可算出 body 起始位置（{@code [0]+[1]}），
-     *       避免把两种分隔符都按 4 字节跳导致 {@code \n\n} 时多丢 2 字节 body。</li>
-     * </ul>
+     *       避免把两种分隔符都按 4 字节跳导致 {@code \n\n} 时多丢 2 字节 body。
      */
     private static int[] findHeaderBodySeparator(byte[] raw) {
         int crlfCrlf = -1;
@@ -336,7 +328,7 @@ public final class TrafficCompactor {
     // ============================ 内部：报文拼接 ============================
 
     /**
-     * 共享逻辑：拼接 body 段落（带字节数说明 + 调用 {@link #compactBody}）。
+     * 共享逻辑：拼接 body 段落（带字节数说明 + 调用 compactBody）。
      */
     private static void appendBodySection(StringBuilder sb, byte[] body, String contentType) {
         if (body == null || body.length == 0) {
@@ -506,11 +498,11 @@ public final class TrafficCompactor {
     }
 
     /**
-     * 共享逻辑：渲染单个 JSON 原始值——字符串超过 {@link #MAX_JSON_STRING_CHARS} 时
+     * 共享逻辑：渲染单个 JSON 原始值——字符串超过 MAX_JSON_STRING_CHARS 时
      * 截断并追加截断标记（marker 放进引号内，避免与 JSON 字符串的闭合引号混淆）；
      * 数字 / 布尔 / null 直接渲染，不截断（截了可能改变语义）。
      *
-     * <p>{@link #compactJsonValue} 与 {@link #renderPrimitive} 共用，消除重复实现。</p>
+     * compactJsonValue 与 renderPrimitive 共用，消除重复实现。
      */
     private static String compactJsonPrimitive(JsonPrimitive p) {
         if (p.isString()) {
@@ -548,7 +540,7 @@ public final class TrafficCompactor {
     }
 
     /**
-     * 非 JSON / 非二进制的纯文本 body 截断：超过 {@link #MAX_OTHER_BODY_CHARS} 字符
+     * 非 JSON / 非二进制的纯文本 body 截断：超过 MAX_OTHER_BODY_CHARS 字符
      * 时按字节/字符数截断并附占位说明（保留原始长度便于模型判断"是不是返回被截了"）。
      */
     static String truncateOther(String text) {
@@ -568,7 +560,7 @@ public final class TrafficCompactor {
     // {@code 【HTTP 请求】...【HTTP 响应】...} 文本块压缩成"几行占位"，避免
     // Burp Output 里刷一堆 header / body 明文。
     //
-    // 与 {@link #compactRawRequest} / {@link #compactRawResponse} 的差异：
+    // 与 compactRawRequest / compactRawResponse 的差异：
     // - 那两个是从"原始字节"做完整解析（首行 / headers / body 全要），用于阶段 1
     //   喂给模型的"极致压缩"摘要；
     // - 本方法是从"已经是人类可读的中文文本块"做轻量替换，只把"请求行 / 状态码 /
@@ -577,7 +569,6 @@ public final class TrafficCompactor {
 
     /**
      * 压缩消息文本里的 HTTP 块，输出形如：
-     * <pre>
      * 【HTTP 请求】
      * POST http://192.168.253.128/dvwa/xx
      * （请求头：略...）
@@ -586,32 +577,27 @@ public final class TrafficCompactor {
      * 【HTTP 响应】
      * （响应头：略...）
      * （响应体：4757字节）
-     * </pre>
      *
-     * <p>处理三种标记块（中英文都覆盖）：</p>
-     * <ul>
-     *   <li>{@code 【HTTP 请求】} ... 紧跟的"METHOD URL"行 + 后续 headers + 请求体；
-     *       压缩后保留 METHOD URL 行、body 字节数，headers 折叠为占位；</li>
-     *   <li>{@code 【HTTP 响应】} ... 状态码 + headers + 响应体；压缩后 headers 折叠为占位，
-     *       保留 body 字节数（状态码丢弃——按用户期望的最简形式）；</li>
-     *   <li>{@code 【重放结果（...）】 ... [响应] ... [响应体 N 字节]} —— 重放工具回填文本，
-     *       整段折叠为占位，只保留外层 "【重放结果（callId=xxx，耗时 Nms）】" 元信息。</li>
-     * </ul>
+     * 处理三种标记块（中英文都覆盖）：
+     *   {@code 【HTTP 请求】} ... 紧跟的"METHOD URL"行 + 后续 headers + 请求体；
+     *       压缩后保留 METHOD URL 行、body 字节数，headers 折叠为占位；
+     *   {@code 【HTTP 响应】} ... 状态码 + headers + 响应体；压缩后 headers 折叠为占位，
+     *       保留 body 字节数（状态码丢弃——按用户期望的最简形式）；
+     *   {@code 【重放结果（...）】 ... [响应] ... [响应体 N 字节]} —— 重放工具回填文本，
+     *       整段折叠为占位，只保留外层 "【重放结果（callId=xxx，耗时 Nms）】" 元信息。
      *
-     * <p>识别两种"body 字节数行"格式（项目里两套 prompt 渲染器格式不同）：</p>
-     * <ul>
-     *   <li>{@code buildUserPrompt} 风格：{@code 请求体（共 123 字节）：} / {@code 响应体（共 N 字节）：}（圆括号）</li>
-     *   <li>{@code buildReplayResultUserPrompt} 风格：{@code [响应体 N 字节]} / {@code [Body N bytes]}（方括号）</li>
-     * </ul>
+     * 识别两种"body 字节数行"格式（项目里两套 prompt 渲染器格式不同）：
+     *   {@code buildUserPrompt} 风格：{@code 请求体（共 123 字节）：} / {@code 响应体（共 N 字节）：}（圆括号）
+     *   {@code buildReplayResultUserPrompt} 风格：{@code [响应体 N 字节]} / {@code [Body N bytes]}（方括号）
      *
-     * <p>没有上述标记时，文本原样返回（不抛异常、不报错——保证其它消息 / 错误片段等
-     * "非 HTTP" 内容原样通过）。</p>
+     * 没有上述标记时，文本原样返回（不抛异常、不报错——保证其它消息 / 错误片段等
+     * "非 HTTP" 内容原样通过）。
      *
-     * <p><b>两路共用</b>：本方法是工具循环阶段 2 DEBUG 的核心——{@code ToolLoopOrchestrator}
+     * 两路共用：本方法是工具循环阶段 2 DEBUG 的核心——{@code ToolLoopOrchestrator}
      * 在"已经持有 messages 里的字符串、拿不到原 HttpRequest/HttpResponse 对象"的场景下用它。
      * 阶段 1 DEBUG 走 {@code PromptBuilder.buildUserPromptDebug(req, resp)}；为了避免"两套
      * 压缩逻辑漂移"，那个方法内部也调本方法——先把 {@code buildUserPrompt} 拼成完整版，
-     * 再用 {@code compactMessageText} 压成调试版。</p>
+     * 再用 {@code compactMessageText} 压成调试版。
      */
     public static String compactMessageText(String text) {
         if (text == null || text.isEmpty()) {
@@ -739,12 +725,10 @@ public final class TrafficCompactor {
 
     /**
      * 识别一行是否为"body 字节数标记行"——同时覆盖项目里两套 prompt 渲染器用的两种格式：
-     * <ul>
-     *   <li>{@code buildUserPrompt} 风格（圆括号）：{@code 请求体（共 123 字节）：}、
-     *       {@code 响应体（共 N 字节）：}（中英冒号都接受）</li>
-     *   <li>{@code buildReplayResultUserPrompt} 风格（方括号）：{@code [响应体 123 字节]}、
-     *       {@code [Body 123 bytes]}</li>
-     * </ul>
+     *   {@code buildUserPrompt} 风格（圆括号）：{@code 请求体（共 123 字节）：}、
+     *       {@code 响应体（共 N 字节）：}（中英冒号都接受）
+     *   {@code buildReplayResultUserPrompt} 风格（方括号）：{@code [响应体 123 字节]}、
+     *       {@code [Body 123 bytes]}
      *
      * @param line     待检测行
      * @param which    "request" / "response"——用于区分请求/响应的关键字（仅圆括号风格需要）
@@ -792,8 +776,8 @@ public final class TrafficCompactor {
      * 并返回该边界行的索引——调用方在 while 循环里把 {@code i} 设为此值后，
      * 外层 for 循环会自然从边界行的下一行开始（因为 for 末尾有 i++）。
      *
-     * <p>关键：返回的 i 是"刚好跳完 body"的索引——外层 for 循环会再 i++ 进入
-     * 真正的下一节首行。</p>
+     * 关键：返回的 i 是"刚好跳完 body"的索引——外层 for 循环会再 i++ 进入
+     * 真正的下一节首行。
      */
     private static int advancePastBody(String[] lines, int i) {
         // i 此时是 body 正文首行；往后扫到第一个"边界行"（空行 / 【/[/<EOF>）
@@ -821,9 +805,9 @@ public final class TrafficCompactor {
      * 是否为"外层节结束"标记：重放结果块后面的【重放预算已耗尽】/【xx】或
      * [Replay budget...] 类提示。空行不算"节结束"——body 内可能含空行。
      *
-     * <p><b>注意</b>：{@code [响应体 N 字节]} / {@code [Body N bytes]} 形如"外层"标题
-     * （以 {@code [} 开头）但实际是 body 字节数标记行，<b>不</b>当节结束——它属于本块
-     * 内的子节，需要被识别并压缩。</p>
+     * 注意：{@code [响应体 N 字节]} / {@code [Body N bytes]} 形如"外层"标题
+     * （以 {@code [} 开头）但实际是 body 字节数标记行，不当节结束——它属于本块
+     * 内的子节，需要被识别并压缩。
      */
     private static boolean isOuterSectionEnd(String line) {
         if (line == null || line.isEmpty()) {
@@ -845,7 +829,7 @@ public final class TrafficCompactor {
 
     /**
      * 是否为 body 字节数标记行：{@code [响应体 N 字节]} / {@code [请求体 N 字节]} /
-     * {@code [Body N bytes]} / {@code [Request body N bytes]}。专给 {@link #isOuterSectionEnd}
+     * {@code [Body N bytes]} / {@code [Request body N bytes]}。专给 isOuterSectionEnd
      * 用——把这类行从"外层节结束"的白名单里排除掉。
      */
     private static boolean isBodySizeMarker(String line) {

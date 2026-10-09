@@ -25,15 +25,15 @@ import java.util.List;
 /**
  * 单次"分析"的 agent ↔ AI 交互轨迹记录器。
  *
- * <p>每次分析开始时通过 {@link #openForAnalysis} 创建一个 logger，AI 调用层
- * 在交互过程中通过 {@link #logRequest} 把请求追加到内存缓冲，通过实例方法
- * {@link #appendAi} / {@link #appendError} 把响应和错误追加到内存缓冲；分析结束时
- * （{@code AnalysisResultSink}）调用 {@link #writeTo(Path)} 把缓冲内容写成 XML 文件，
+ * 每次分析开始时通过 openForAnalysis 创建一个 logger，AI 调用层
+ * 在交互过程中通过 logRequest 把请求追加到内存缓冲，通过实例方法
+ * appendAi / appendError 把响应和错误追加到内存缓冲；分析结束时
+ * （{@code AnalysisResultSink}）调用 writeTo(Path) 把缓冲内容写成 XML 文件，
  * 文件路径与一条历史记录绑定，由 {@code AnalysisHistoryStore} 负责生命周期管理
- * （删除历史记录时同步删除 XML）。</p>
+ * （删除历史记录时同步删除 XML）。
  *
- * <p>输出格式（不写缩进，结构紧凑）：</p>
- * <pre>{@code
+ * 输出格式（不写缩进，结构紧凑）：
+ * {@code
  * <context>
  *   <agent>
  *     <model>...</model>
@@ -50,24 +50,22 @@ import java.util.List;
  *     <usage>...</usage>
  *   </ai>
  * </context>
- * }</pre>
+ * }
  *
- * <p>线程模型：</p>
- * <ul>
- *   <li>{@link #openForAnalysis} + {@link #bindToCurrentThread} 把 logger 绑到分析线程上，
- *       AI 调用层的静态入口 {@link #logRequest} 通过它定位；</li>
- *   <li><b>异步回调必须用实例方法</b>：{@link #logRequest} 等静态入口依赖 ThreadLocal，
- *       <b>在 JDK HttpClient worker / commonPool 线程上 {@link #current()} 会返回 null，
- *       记录被静默丢弃</b>。AI 调用层在入口处抓取 logger 引用
+ * 线程模型：
+ *   openForAnalysis + bindToCurrentThread 把 logger 绑到分析线程上，
+ *       AI 调用层的静态入口 logRequest 通过它定位；
+ *   异步回调必须用实例方法：logRequest 等静态入口依赖 ThreadLocal，
+ *       在 JDK HttpClient worker / commonPool 线程上 current() 会返回 null，
+ *       记录被静默丢弃。AI 调用层在入口处抓取 logger 引用
  *       （{@code WorkflowLogger logger = WorkflowLogger.current()}），然后用实例方法
- *       {@link #appendAi} / {@link #appendError} 写入，保证响应/错误即使在异步回调
- *       线程上也能落盘；</li>
- *   <li>{@link #buffer} 选用 {@link StringBuffer}（线程安全）——异步路径下多个回调
- *       可能并发写同一 logger，{@code StringBuilder} 会破坏内部状态。</li>
- * </ul>
+ *       appendAi / appendError 写入，保证响应/错误即使在异步回调
+ *       线程上也能落盘；
+ *   buffer 选用 StringBuffer（线程安全）——异步路径下多个回调
+ *       可能并发写同一 logger，{@code StringBuilder} 会破坏内部状态。
  *
- * <p>分析结束必须调 {@link #unbindFromCurrentThread}，避免执行器线程复用时把后续
- * 分析的内容写进本 logger。</p>
+ * 分析结束必须调 unbindFromCurrentThread，避免执行器线程复用时把后续
+ * 分析的内容写进本 logger。
  */
 public final class WorkflowLogger {
 
@@ -77,9 +75,9 @@ public final class WorkflowLogger {
     /**
      * 单次分析的 audit-trail 缓冲上限（字符数）。
      *
-     * <p>一次分析会把完整提示词（可能含多条同域历史报文）与多轮工具循环的请求/响应全部
+     * 一次分析会把完整提示词（可能含多条同域历史报文）与多轮工具循环的请求/响应全部
      * 留在内存里，被动流量洪峰下这个缓冲会持续抬高堆占用。超限后不再追加新块并落一条
-     * XML 注释标记（丢弃整块而不是截断字符串，保证 XML 结构始终闭合）。</p>
+     * XML 注释标记（丢弃整块而不是截断字符串，保证 XML 结构始终闭合）。
      */
     private static final int MAX_BUFFER_CHARS = 4 * 1024 * 1024;
 
@@ -89,12 +87,12 @@ public final class WorkflowLogger {
     /**
      * 线程安全的缓冲：同一 logger 可能被异步回调线程并发写（如 {@code parseAndLog}
      * 在 HttpClient worker 上执行时与另一阶段的 {@code appendAi} 同时触发）。
-     * 用 {@link StringBuffer} 而不是 {@code synchronized(this)} 包各 append：前者
+     * 用 StringBuffer 而不是 {@code synchronized(this)} 包各 append：前者
      * 内置同步、对外 API 简单；后者容易漏包。
      */
     private final StringBuffer buffer = new StringBuffer(4096);
 
-    /** 缓冲超上限后置位：后续块被丢弃，{@link #writeTo} 会写一条"已截断"注释。 */
+    /** 缓冲超上限后置位：后续块被丢弃，writeTo 会写一条"已截断"注释。 */
     private boolean truncated;
 
     private WorkflowLogger() {
@@ -102,9 +100,9 @@ public final class WorkflowLogger {
     }
 
     /**
-     * 为一次"分析"创建 logger。调用方应紧接着 {@link #bindToCurrentThread}。
+     * 为一次"分析"创建 logger。调用方应紧接着 bindToCurrentThread。
      *
-     * <p>audit-trail 是每次分析的标配产物——不再检查任何系统属性开关。</p>
+     * audit-trail 是每次分析的标配产物——不再检查任何系统属性开关。
      */
     public static WorkflowLogger openForAnalysis() {
         return new WorkflowLogger();
@@ -118,7 +116,7 @@ public final class WorkflowLogger {
         CURRENT.remove();
     }
 
-    /** 当前线程是否已绑定 logger（决定 {@link #logRequest} 等是否生效）。 */
+    /** 当前线程是否已绑定 logger（决定 logRequest 等是否生效）。 */
     public static boolean isEnabled() {
         return CURRENT.get() != null;
     }
@@ -132,8 +130,8 @@ public final class WorkflowLogger {
      * 记录一次"请求"：把 model / max_tokens / messages / [response_format]
      * 序列化为一个 {@code <agent>} 块追加到缓冲。
      *
-     * <p>本入口依赖 ThreadLocal：调用方必须在分析线程上先 {@link #bindToCurrentThread}，
-     * 未绑定或异步回调线程上调用时静默丢弃。</p>
+     * 本入口依赖 ThreadLocal：调用方必须在分析线程上先 bindToCurrentThread，
+     * 未绑定或异步回调线程上调用时静默丢弃。
      */
     public static void logRequest(AiConfig config, List<AiClient.ChatMessage> messages, boolean requireJson) {
         WorkflowLogger logger = CURRENT.get();
@@ -207,10 +205,10 @@ public final class WorkflowLogger {
     /**
      * 把 AI 原始响应 body 写入 {@code <ai>} 块。
      *
-     * <p><b>为什么是 public</b>：{@code OpenAiCompatibleClient} 在异步回调
+     * 为什么是 public：{@code OpenAiCompatibleClient} 在异步回调
      * （HttpClient worker / commonPool）线程上解析响应——这时 ThreadLocal 拿不到
      * 当前 logger，所以 AI 调用层入口先把 logger 引用抓成 final 局部变量，再调用本
-     * 实例方法写入，避免响应日志被静默丢弃。</p>
+     * 实例方法写入，避免响应日志被静默丢弃。
      */
     public void appendAi(String rawBody) {
         // synchronized(this) 同 appendAgent：保证 "<ai>...</ai>" 作为一个原子块写入，
@@ -242,8 +240,8 @@ public final class WorkflowLogger {
     /**
      * 把一次 AI 错误写入 {@code <ai><error>...</error></ai>} 块。
      *
-     * <p>与 {@link #appendAi} 同理：异步回调线程上不能依赖 ThreadLocal，必须直接传 logger
-     * 引用过来调用实例方法。</p>
+     * 与 appendAi 同理：异步回调线程上不能依赖 ThreadLocal，必须直接传 logger
+     * 引用过来调用实例方法。
      */
     public void appendError(String errorMessage) {
         // synchronized(this) 同 appendAgent/appendAi：保证 "<ai><error>...</error></ai>" 块级原子写入。
@@ -258,10 +256,10 @@ public final class WorkflowLogger {
     }
 
     /**
-     * 缓冲是否已达上限：达到则丢弃本块并置 {@link #truncated}。
+     * 缓冲是否已达上限：达到则丢弃本块并置 truncated。
      *
-     * <p>丢弃的是<b>整块</b>（{@code <agent>} / {@code <ai>}），因此 XML 结构保持闭合，
-     * 不会出现"半个元素"；调用方必须在 {@code synchronized(this)} 内调用。</p>
+     * 丢弃的是整块（{@code <agent>} / {@code <ai>}），因此 XML 结构保持闭合，
+     * 不会出现"半个元素"；调用方必须在 {@code synchronized(this)} 内调用。
      *
      * @return true 表示本块已被丢弃，调用方应直接返回。
      */
@@ -307,11 +305,11 @@ public final class WorkflowLogger {
     /**
      * 转义 XML 文本：替换 {@code <} / {@code &} / {@code >}，并丢弃 XML 1.0 不允许的控制字符。
      *
-     * <p><b>为什么必须丢控制字符</b>：模型响应里的 {@code \u0000}~{@code \u001F}
+     * 为什么必须丢控制字符：模型响应里的 {@code \u0000}~{@code \u001F}
      * （JSON 转义 {@code "\\u0001"} 经 Gson 还原后就是真实控制字符）在 XML 1.0 里既不能
-     * 直接出现、也无法用字符引用表示；原样写盘会让整份 audit-trail <b>无法解析</b>
+     * 直接出现、也无法用字符引用表示；原样写盘会让整份 audit-trail 无法解析
      * （{@code readTrail} 抛 SAXException → UI 表现为"链路追踪打不开"）。
-     * {@code \t} / {@code \n} / {@code \r} 是 XML 允许的三个控制字符，保留。</p>
+     * {@code \t} / {@code \n} / {@code \r} 是 XML 允许的三个控制字符，保留。
      */
     private static String escape(String text) {
         if (text == null) {
@@ -338,10 +336,10 @@ public final class WorkflowLogger {
     /**
      * 把 JSON key 规范成合法的 XML 元素名。
      *
-     * <p>JSON 的 key 是任意字符串（{@code "1st"}、{@code "user name"}、{@code "a<b"} 都合法），
+     * JSON 的 key 是任意字符串（{@code "1st"}、{@code "user name"}、{@code "a<b"} 都合法），
      * 直接拿来当标签名会产出解析不了的 XML。规则：首字符必须是字母或下划线，其余字符限定为
      * 字母/数字/下划线/连字符/点，非法字符一律替换成 {@code '_'}；以 {@code xml} 开头
-     * （XML 保留前缀，不区分大小写）时加 {@code k_} 前缀。</p>
+     * （XML 保留前缀，不区分大小写）时加 {@code k_} 前缀。
      */
     private static String sanitizeElementName(String name) {
         if (name == null || name.isEmpty()) {
@@ -370,8 +368,8 @@ public final class WorkflowLogger {
     /**
      * 一条可展示的交互消息：{@code role} + {@code content} + 来源。
      *
-     * <p>UI 渲染时按 {@link Source} 着色，{@code role} 决定标签头（如 [system] / [user] /
-     * [assistant]），{@code content} 是消息正文。</p>
+     * UI 渲染时按 Source 着色，{@code role} 决定标签头（如 [system] / [user] /
+     * [assistant]），{@code content} 是消息正文。
      */
     public record TrailMessage(String role, String content, Source source) {
     }
@@ -379,16 +377,14 @@ public final class WorkflowLogger {
     /**
      * 解析一个 audit-trail XML 文件，提取全部 {@code <message>} 节点及 ai 块错误回退。
      *
-     * <p>策略：</p>
-     * <ul>
-     *   <li>递归遍历所有 {@code <message>} 节点，通过祖先链定位最近的 {@code <agent>} /
-     *       {@code <ai>} 父元素，决定 {@link Source}；</li>
-     *   <li>若 ai 块没有任何 message（仅含 {@code <error>}），补一条 role=error 的兜底消息，
-     *       保证 UI 不会"有 ai 块却无内容"；</li>
-     *   <li>XML 解析失败 / 文件缺失时抛出 {@link IOException}，由调用方决定如何降级
-     *       （弹窗提示用户）。<b>不</b>做缓存：每次调用都实时读盘解析，符合"链路追踪
-     *       即时反映最新数据"的预期。</li>
-     * </ul>
+     * 策略：
+     *   递归遍历所有 {@code <message>} 节点，通过祖先链定位最近的 {@code <agent>} /
+     *       {@code <ai>} 父元素，决定 Source；
+     *   若 ai 块没有任何 message（仅含 {@code <error>}），补一条 role=error 的兜底消息，
+     *       保证 UI 不会"有 ai 块却无内容"；
+     *   XML 解析失败 / 文件缺失时抛出 IOException，由调用方决定如何降级
+     *       （弹窗提示用户）。不做缓存：每次调用都实时读盘解析，符合"链路追踪
+     *       即时反映最新数据"的预期。
      */
     public static List<TrailMessage> readTrail(Path xmlFile) throws IOException {
         if (xmlFile == null || !Files.exists(xmlFile)) {

@@ -10,13 +10,13 @@ import java.util.stream.Collectors;
 /**
  * 技能启用态与"自动激活"（pinned）集合的持久化仓库。
  *
- * <p>首次启动（{@code initialized} 缺失）：返回 DefaultEnabledSkill#ids() 副本；
+ * 首次启动（{@code initialized} 缺失）：返回 DefaultEnabledSkill#ids() 副本；
  * 后续启动：从 CSV 恢复，pinned 集合走平行键。
  * 任何一次 #saveEnabledIds(Set) 都会把 {@code initialized} 置 true，
- * 永久脱离默认分支。</p>
+ * 永久脱离默认分支。
  *
- * <p>本类非 {@code final}：{@code TrafficFlowWalkthroughTest} 等集成测试需要继承
- * 覆盖 #loadEnabledIds() 提供内存版实现。</p>
+ * 本类非 {@code final}：{@code TrafficFlowWalkthroughTest} 等集成测试需要继承
+ * 覆盖 #loadEnabledIds() 提供内存版实现。
  */
 public class SkillStateStore {
 
@@ -73,10 +73,10 @@ public class SkillStateStore {
     /**
      * 加载"自动激活"的技能 id 集合。
      *
-     * <p>未持久化过（首次安装）时返回空集——"自动激活"是一个明确的用户意图，
-     * 不应该像 #loadEnabledIds() 那样回退到默认集混淆"用户的选择"。</p>
+     * 未持久化过（首次安装）时返回空集——"自动激活"是一个明确的用户意图，
+     * 不应该像 #loadEnabledIds() 那样回退到默认集混淆"用户的选择"。
      *
-     * <p>同样每次返回新集合，调用方可安全修改。</p>
+     * 同样每次返回新集合，调用方可安全修改。
      */
     public Set<String> loadPinnedIds() {
         String csv = preferences.getString(PINNED_IDS_KEY);
@@ -92,8 +92,8 @@ public class SkillStateStore {
     /**
      * 把"自动激活"的技能 id 集合写回持久化。
      *
-     * <p>本方法不联动 {@code initialized} 标志——"自动激活"集合为空是合法状态
-     * （用户从未把任何技能设为自动激活），与"已初始化"无关。</p>
+     * 本方法不联动 {@code initialized} 标志——"自动激活"集合为空是合法状态
+     * （用户从未把任何技能设为自动激活），与"已初始化"无关。
      */
     public void savePinnedIds(Set<String> pinnedIds) {
         String csv = String.join(CSV_SEPARATOR, pinnedIds);

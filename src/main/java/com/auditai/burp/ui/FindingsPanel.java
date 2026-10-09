@@ -58,21 +58,16 @@ import java.util.function.IntConsumer;
 /**
  * "问题"页签：以"模型分析后认为存在 / 可疑"的视角展示当前会话的发现。
  *
- * <p>布局与 {@link AnalysisHistoryPanel} 一致：</p>
- * <ul>
- *   <li><b>上方</b>：表格，每行 = 一条 finding。按"安装时间升序"展示（最旧在前、
+ * 布局与 {@link AnalysisHistoryPanel} 一致：
+ *   上方：表格，每行 = 一条 finding。按"安装时间升序"展示（最旧在前、
  *       最新在底，{@link FindingStore#list()} 已按该顺序返回，与"历史"页签的
- *       "新条目滚到底部"行为一致），顶部 URL 过滤框按 URL / 描述模糊过滤；</li>
- *   <li><b>下方</b>：页签容器，两个页签：
- *     <ol>
- *       <li><b>分析报告</b>（最左，符合"分析报告在左边的第一个位置"）：本次分析的完整报告 + 本条 finding 的描述/证据；</li>
- *       <li><b>报文</b>：左右分栏显示 Request / Response（与 Burp Proxy/Repeater 一致）。</li>
- *     </ol>
- *   </li>
- * </ul>
+ *       "新条目滚到底部"行为一致），顶部 URL 过滤框按 URL / 描述模糊过滤；
+ *   下方：页签容器，两个页签：
+ *       分析报告（最左，符合"分析报告在左边的第一个位置"）：本次分析的完整报告 + 本条 finding 的描述/证据；
+ *       报文：左右分栏显示 Request / Response（与 Burp Proxy/Repeater 一致）。
  *
- * <p>Request / Response 默认优先从 finding 所属的 {@link FindingStore.AnalysisContext}
- * 定位的原文拉取；找不到时按 (method, url) 在 {@link AnalysisHistoryStore} 反查最近一条。</p>
+ * Request / Response 默认优先从 finding 所属的 {@link FindingStore.AnalysisContext}
+ * 定位的原文拉取；找不到时按 (method, url) 在 {@link AnalysisHistoryStore} 反查最近一条。
  */
 public final class FindingsPanel extends JPanel implements LocaleAware {
 
@@ -87,10 +82,10 @@ public final class FindingsPanel extends JPanel implements LocaleAware {
     /**
      * 表格中"隐藏列"的下标，存放 {@link Finding#getFindingId()}。
      *
-     * <p>原本"恢复选中 / 选中时反查 finding"靠 description + url 软匹配，但同一次
+     * 原本"恢复选中 / 选中时反查 finding"靠 description + url 软匹配，但同一次
      * 分析多条 finding 完全可能 description + url 都一样（占位 finding 尤为明显），
      * 会选错行。把 findingId 单独放一隐藏列，所有需要精确匹配的地方都按这一列来，
-     * 不再依赖软匹配。</p>
+     * 不再依赖软匹配。
      */
     private final int COLUMN_FINDING_ID;
 
@@ -151,8 +146,8 @@ public final class FindingsPanel extends JPanel implements LocaleAware {
     /**
      * 在飞的"选中行报文加载"任务（{@link SwingWorker} 句柄）。
      *
-     * <p>选中行切换 / 详情区清空时取消旧任务并置空引用，防止旧任务完成后把
-     * 已过期选择的报文回填到编辑器（与 {@link AnalysisHistoryPanel} 的做法一致）。</p>
+     * 选中行切换 / 详情区清空时取消旧任务并置空引用，防止旧任务完成后把
+     * 已过期选择的报文回填到编辑器（与 {@link AnalysisHistoryPanel} 的做法一致）。
      */
     private final AtomicReference<SwingWorker<byte[][], Void>> messageLoadInFlight = new AtomicReference<>();
 
@@ -450,22 +445,19 @@ public final class FindingsPanel extends JPanel implements LocaleAware {
     /**
      * 把 finding 对应的 Request / Response 写入下方编辑器。
      *
-     * <p><b>取报文优先级：</b></p>
-     * <ol>
-     *   <li>{@link FindingStore.AnalysisContext#getRequestBytes()} / {@code getResponseBytes()}
-     *       （由 MessageTab 在分析完成时缓存的原文，<b>仅内存</b>）；</li>
-     *   <li>{@link AnalysisHistoryStore} 按 (method, url) 反查时间最近一条
-     *       （磁盘恢复后或 finding 来自代理流量的兜底，按需解压读 gzip）；</li>
-     *   <li>都没有 → 清空两个编辑器，Burp 编辑器自动显示 "No response" 占位符。</li>
-     * </ol>
+     * 取报文优先级：
+     *   {@link FindingStore.AnalysisContext#getRequestBytes()} / {@code getResponseBytes()}
+     *       （由 MessageTab 在分析完成时缓存的原文，仅内存）；
+     *   {@link AnalysisHistoryStore} 按 (method, url) 反查时间最近一条
+     *       （磁盘恢复后或 finding 来自代理流量的兜底，按需解压读 gzip）；
+     *   都没有 → 清空两个编辑器，Burp 编辑器自动显示 "No response" 占位符。
      *
-     * <p>正文获取在 {@link SwingWorker} 后台线程执行：第 2 层命中时含 gzip 读盘，
+     * 正文获取在 {@link SwingWorker} 后台线程执行：第 2 层命中时含 gzip 读盘，
      * 不能在 EDT 上同步做（与 {@link AnalysisHistoryPanel} 的后台加载范式一致）。
-     * 快速切换选中行会取消旧任务（{@link #messageLoadInFlight}），防止旧数据回填。</p>
+     * 快速切换选中行会取消旧任务（{@link #messageLoadInFlight}），防止旧数据回填。
      *
-     * <p>不调 {@code setRequest(HttpRequest.httpRequest())} / {@code setResponse(null)}
+     * 不调 {@code setRequest(HttpRequest.httpRequest())} / {@code setResponse(null)}
      * 这类"空实例"，避免让 Burp 原生编辑器进入"incomplete"异常态。
-     * </p>
      */
     private void renderMessage(Finding finding) {
         // 取消上一次仍在飞行的加载任务（如果它还没结束），避免旧任务覆盖新选择
@@ -682,12 +674,12 @@ public final class FindingsPanel extends JPanel implements LocaleAware {
      * 创建表格右键菜单：提供 "Delete" 与 "Clear history" 两项。弹出前自动选中鼠标所在行
      * （避免"点行 A 但选中行 B"的错位，与 {@link AnalysisHistoryPanel} 的做法一致）。
      *
-     * <p>"Clear history" 在 store 不可用或当前无任何 finding 时禁用，保留确认弹窗语义
+     * "Clear history" 在 store 不可用或当前无任何 finding 时禁用，保留确认弹窗语义
      * （与原工具栏 Clear 按钮一致）。"Delete" 在未命中数据行时禁用，避免菜单在空白处
-     * 可点却无事可删。</p>
+     * 可点却无事可删。
      *
-     * <p>菜单在构造期只创建一次，每次弹出前按当前语言刷新文案（与历史面板一致），
-     * 避免语言切换后菜单停留在旧语言。</p>
+     * 菜单在构造期只创建一次，每次弹出前按当前语言刷新文案（与历史面板一致），
+     * 避免语言切换后菜单停留在旧语言。
      */
     private JPopupMenu createContextMenu() {
         JPopupMenu menu = new JPopupMenu();
@@ -726,11 +718,11 @@ public final class FindingsPanel extends JPanel implements LocaleAware {
     /**
      * 主动触发一次"数量变化"回调：把当前可见条数推给 {@code onCountChanged}。
      *
-     * <p>用途：{@link MainTab} 在 {@code addTab("问题", findingsPanel)} 之前就已经
+     * 用途：{@link MainTab} 在 {@code addTab("问题", findingsPanel)} 之前就已经
      * {@code new FindingsPanel(...)}，构造器里的 {@link #refresh()} 会调用回调，
      * 但此时 {@code findingsTabIndex} 还是 -1，回调被早退；{@code addTab} 之后再没人
      * 触发，页签标题就停留在初值"问题"。在 addTab 之后显式调一次可把已有数据
-     * （磁盘恢复的 / 旧 session 留的）同步到标题。</p>
+     * （磁盘恢复的 / 旧 session 留的）同步到标题。
      */
     public void triggerCountCallback() {
         if (onCountChanged != null) {
@@ -745,9 +737,9 @@ public final class FindingsPanel extends JPanel implements LocaleAware {
     /**
      * 把 findingId 列设为 0 宽不可见。
      *
-     * <p>必须在<b>每次</b>列模型重建后调用：{@link #refreshI18n()} 里的
+     * 必须在每次列模型重建后调用：{@link #refreshI18n()} 里的
      * {@code setColumnIdentifiers} 会重建 {@code TableColumnModel}，构造期设置的宽度全部作废
-     * （表现为切一次语言后 ID 列重新冒出来）。</p>
+     * （表现为切一次语言后 ID 列重新冒出来）。
      */
     private void applyHiddenIdColumn() {
         TableColumn idColumn = table.getColumnModel().getColumn(COLUMN_FINDING_ID);
@@ -795,8 +787,8 @@ public final class FindingsPanel extends JPanel implements LocaleAware {
      * 释放资源：插件卸载时调用。停止防抖定时器、取消在飞行的报文加载任务、
      * 注销 I18n 监听器，避免后台 SwingWorker 继续引用已卸载的编辑器。
      *
-     * <p>注：{@code FindingStore} 的变更监听器是以匿名 lambda 注册的、无法定向注销；
-     * 由 {@code MainTab.close()} → {@link I18n#clearAll()} 与 store 生命周期结束一并回收。</p>
+     * 注：{@code FindingStore} 的变更监听器是以匿名 lambda 注册的、无法定向注销；
+     * 由 {@code MainTab.close()} → {@link I18n#clearAll()} 与 store 生命周期结束一并回收。
      */
     public void close() {
         if (refreshTimer != null && refreshTimer.isRunning()) {
@@ -824,13 +816,11 @@ public final class FindingsPanel extends JPanel implements LocaleAware {
     /**
      * 严重程度颜色：让"红 / 橙 / 黄 / 蓝 / 灰"在表格里一眼可辨。
      *
-     * <p>实现：</p>
-     * <ul>
-     *   <li>"严重程度"列（第 0 列）按等级染色 + 加粗；</li>
-     *   <li>"描述"列（第 3 列）如果是占位 finding（描述末尾带"（占位）"），用斜体 + 浅灰
-     *       标识，让用户一眼区分"模型给的" vs "UI 兜底生成的"。</li>
-     *   <li>其它列保持默认外观。</li>
-     * </ul>
+     * 实现：
+     *   "严重程度"列（第 0 列）按等级染色 + 加粗；
+     *   "描述"列（第 3 列）如果是占位 finding（描述末尾带"（占位）"），用斜体 + 浅灰
+     *       标识，让用户一眼区分"模型给的" vs "UI 兜底生成的"。
+     *   其它列保持默认外观。
      */
     private static final class SeverityAwareRenderer extends DefaultTableCellRenderer {
 

@@ -11,16 +11,16 @@ import java.util.Optional;
 /**
  * 公共工具：从 Burp Proxy 历史中按"方法 + URL"匹配反查与给定请求对应的响应。
  *
- * <p>用途：Burp 各模块（Repeater / Intruder / Request 编辑器等）右键时，
+ * 用途：Burp 各模块（Repeater / Intruder / Request 编辑器等）右键时，
  * {@code ContextMenuEvent.selectedRequestResponses()} 返回的
  * {@code HttpRequestResponse} 可能只有请求没有响应——用本工具从
- * {@code api.proxy().history()} 按 URL + Method 反查补回响应。</p>
+ * {@code api.proxy().history()} 按 URL + Method 反查补回响应。
  *
- * <p><b>关于接口不统一：</b>Montoya 2026.7 中
+ * 关于接口不统一：Montoya 2026.7 中
  * {@code burp.api.montoya.http.message.HttpRequestResponse} 与
- * {@code burp.api.montoya.proxy.ProxyHttpRequestResponse} 是两个<b>平行接口</b>（不互相继承），
+ * {@code burp.api.montoya.proxy.ProxyHttpRequestResponse} 是两个平行接口（不互相继承），
  * 但都暴露同名 {@code request()} / {@code response()} 方法。这里用
- * {@code instanceof} 分别走静态调用，避开反射。</p>
+ * {@code instanceof} 分别走静态调用，避开反射。
  */
 public final class HttpResponseLookup {
 
@@ -36,11 +36,11 @@ public final class HttpResponseLookup {
     /**
      * 从 Burp Proxy 历史反查与给定请求匹配的非空响应。
      *
-     * <p>匹配规则：HTTP 方法 + URL 字符串严格相等（同 URL 不同方法不算命中，
-     * 避免误把 GET 命中的响应套到 POST 上）。</p>
+     * 匹配规则：HTTP 方法 + URL 字符串严格相等（同 URL 不同方法不算命中，
+     * 避免误把 GET 命中的响应套到 POST 上）。
      *
-     * <p>遍历顺序：按 {@code api.proxy().history()} 的自然顺序（通常最新在前），取第一条含响应的命中。
-     * 性能上：O(n) 遍历，仅在右键事件触发时执行一次，可接受。</p>
+     * 遍历顺序：按 {@code api.proxy().history()} 的自然顺序（通常最新在前），取第一条含响应的命中。
+     * 性能上：O(n) 遍历，仅在右键事件触发时执行一次，可接受。
      *
      * @param api     Burp API 门面；为 null 时直接返回 empty（允许单元测试不依赖 Montoya）。
      * @param request 原始请求，仅用其 method / url 作为匹配键。
@@ -89,7 +89,7 @@ public final class HttpResponseLookup {
     }
 
     /**
-     * 取历史项的请求：两个平行接口二选一，都返回 {@link HttpRequest}，但静态类型不同，
+     * 取历史项的请求：两个平行接口二选一，都返回 HttpRequest，但静态类型不同，
      * 只能分别 instanceof 后调用。任一分支失败返回 null。
      */
     private static HttpRequest extractRequest(Object history) {
@@ -102,7 +102,7 @@ public final class HttpResponseLookup {
         return null;
     }
 
-    /** 取历史项的响应：参见 {@link #extractRequest}。 */
+    /** 取历史项的响应：参见 extractRequest。 */
     private static HttpResponse extractResponse(Object history) {
         if (history instanceof HttpRequestResponse pair) {
             return pair.response();

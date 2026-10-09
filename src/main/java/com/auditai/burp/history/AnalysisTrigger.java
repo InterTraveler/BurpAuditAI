@@ -3,8 +3,8 @@ package com.auditai.burp.history;
 /**
  * 触发一次 AI 分析的来源。
  *
- * <p>用于"历史"页签的"分析类型"列：让用户一眼区分这条记录是手动点 Analyze 触发的
- * 还是被动流量分析自动触发的。</p>
+ * 用于"历史"页签的"分析类型"列：让用户一眼区分这条记录是手动点 Analyze 触发的
+ * 还是被动流量分析自动触发的。
  */
 public enum AnalysisTrigger {
 

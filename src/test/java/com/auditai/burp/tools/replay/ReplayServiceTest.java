@@ -22,12 +22,12 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * {@link ReplayService} v3 协议（按位置分类的参数替换）的单元测试。
  *
- * <p>用 JDK 动态代理构造假的 {@link HttpRequest} / {@link HttpParameter} /
+ * 用 JDK 动态代理构造假的 {@link HttpRequest} / {@link HttpParameter} /
  * {@link MontoyaApi}——参考 {@code TrafficFlowWalkthroughTest.fakeRequest} 的套路。
  * 这里只覆盖"参数替换"的纯逻辑，不真发 HTTP；真发部分的兜底逻辑在
- * {@code ReplayServiceIntegrationTest} 里覆盖（用本地 HttpServer 跑端到端）。</p>
+ * {@code ReplayServiceIntegrationTest} 里覆盖（用本地 HttpServer 跑端到端）。
  *
- * <p><b>每个用例都打印"模型输入 arguments + 期望变化"</b>，方便对照查看测试流程。</p>
+ * 每个用例都打印"模型输入 arguments + 期望变化"，方便对照查看测试流程。
  */
 class ReplayServiceTest {
 
@@ -349,11 +349,11 @@ class ReplayServiceTest {
 
     /**
      * 一次重放同时传 path + query，验证 v3 协议"任一 key notFound → 整体拒绝"语义。
-     * <p>path + query 同框是"互斥"的——path-only 要求 URL 不含 {@code ?}。
+     * path + query 同框是"互斥"的——path-only 要求 URL 不含 {@code ?}。
      * 想同时改 path 段值和 query 参数，必须分两次重放或用 path-only URL。
      * 本测试验证：原请求有 query param（{@code expand=posts}），{@code url()} 动态拼出来
      * 会含 {@code ?}，触发 path-only 限制 → path 那条 key 进 notFound → 整体抛 IAE
-     * （即使 query 那条本身合法也照样拒绝——避免模型以为替换生效了）。</p>
+     * （即使 query 那条本身合法也照样拒绝——避免模型以为替换生效了）。
      */
     @Test
     void applyReplacements_pathParam_andQueryParam_together() {
@@ -483,9 +483,9 @@ class ReplayServiceTest {
      * 验证 {@code ParamChange.originalValue} 走 {@code decodeParamValue} 把 wire 上的
      * percent-encoded / JSON literal value 还原成明文给模型看。
      *
-     * <p>fake 的 {@code ParsedHttpParameter.value()} 返回的字节是"wire 形态"——
+     * fake 的 {@code ParsedHttpParameter.value()} 返回的字节是"wire 形态"——
      * 这里故意构造一个已经 percent-encoded 的 value（如 {@code "1%27"}），验证
-     * 解码后变成明文 {@code "1'"}，而不是把密文直接塞给 model。</p>
+     * 解码后变成明文 {@code "1'"}，而不是把密文直接塞给 model。
      */
     @Test
     void applyReplacements_originalValue_isDecodedFromWire() {
@@ -661,13 +661,11 @@ class ReplayServiceTest {
 
     /**
      * 通用打印 + 跑一个小用例。控制台输出包含：
-     * <pre>
      *   原始请求行
      *   模型 arguments（明文）
      *   changes（key=old → key=new with location）
      *   builder 收到的 wire-ready value（query/form/json 用）
      *   最终 wire-ready path
-     * </pre>
      */
     private static ReplayService.BuildOutcome runEncodingScenario(
             String title,
@@ -742,10 +740,8 @@ class ReplayServiceTest {
 
     /**
      * 把 {@code req.url()} 还原成 request-target（{@code /path?query}）：
-     * <ul>
-     *   <li>绝对 URL（{@code http://host/path?query}）→ {@code /path?query}</li>
-     *   <li>相对 URL（{@code /path?query}）→ 原样返回</li>
-     * </ul>
+     *   绝对 URL（{@code http://host/path?query}）→ {@code /path?query}
+     *   相对 URL（{@code /path?query}）→ 原样返回
      */
     private static String requestTarget(HttpRequest req) {
         String url = req.url();
@@ -1311,8 +1307,8 @@ class ReplayServiceTest {
      * withUpdatedHeader(name, value)、withRemovedParameters(list)、
      * withAddedParameters(list)、path()、withPath(newPath)。
      *
-     * <p>path 与 url 的关系：默认情况下 path 是从 url 去掉 query 推导出来的；
-     * 带显式 path 的重载用显式值。withPath(newPath) 返回新 request，path 用新值。</p>
+     * path 与 url 的关系：默认情况下 path 是从 url 去掉 query 推导出来的；
+     * 带显式 path 的重载用显式值。withPath(newPath) 返回新 request，path 用新值。
      */
     private static HttpRequest fakeRequest(List<ParsedHttpParameter> params,
                                            List<HttpHeader> headers,

@@ -18,9 +18,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * {@link SkillStateStore} 的单元测试。
  *
- * <p>{@link Preferences} 是 Montoya API 接口，没有内存版实现——本测试用
+ * {@link Preferences} 是 Montoya API 接口，没有内存版实现——本测试用
  * {@link java.lang.reflect.Proxy} 动态实现一个"内存 Preferences"，行为尽量贴近
- * 真实 API（默认值的取用、写入覆盖、未设置时返回默认）。</p>
+ * 真实 API（默认值的取用、写入覆盖、未设置时返回默认）。
  */
 class SkillStateStoreTest {
 

@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * {@link CancellableAiCall} 单元测试：覆盖正常返回、自定义异常、用户取消三类路径。
  *
- * <p>底层 future 用 {@link CompletableFuture#completedFuture} 桩，无须真实 HTTP 客户端。</p>
+ * 底层 future 用 {@link CompletableFuture#completedFuture} 桩，无须真实 HTTP 客户端。
  */
 final class CancellableAiCallTest {
 

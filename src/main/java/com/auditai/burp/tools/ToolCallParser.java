@@ -12,10 +12,9 @@ import java.util.Optional;
 
 /**
  * 把模型在最终 JSON 里输出的 {@code tool_calls} 数组解析成强类型
- * {@link ToolCall} 列表（不可变）。
+ * ToolCall 列表（不可变）。
  *
- * <p>输出协议（与各工具的提示词描述对齐）：</p>
- * <pre>
+ * 输出协议（与各工具的提示词描述对齐）：
  * {
  *   "analysis": "...",                  // 可选，模型当前对最终结论的"中间草稿"
  *   "tool_calls": [                     // 可选，0 ~ N 个工具调用
@@ -28,11 +27,10 @@ import java.util.Optional;
  *     }
  *   ]
  * }
- * </pre>
  *
- * <p>本解析器是<b>宽容</b>的：模型输出带 markdown 代码块、夹杂前后空白、单引号误用等
+ * 本解析器是宽容的：模型输出带 markdown 代码块、夹杂前后空白、单引号误用等
  * 都能兜底；只在完全没有合法 JSON 时才返回 empty。详见同款思路的
- * {@code AnalysisResponseParser#tryParseObject}。</p>
+ * {@code AnalysisResponseParser#tryParseObject}。
  */
 public final class ToolCallParser {
 
@@ -42,10 +40,10 @@ public final class ToolCallParser {
     /**
      * 模型"中间 analysis 草稿"字段的兜底字段名（按优先级排列）。
      *
-     * <p>与 {@code AnalysisResponseParser.ANALYSIS_FALLBACK_KEYS} 对齐：兼容推理模型
+     * 与 {@code AnalysisResponseParser.ANALYSIS_FALLBACK_KEYS} 对齐：兼容推理模型
      * （o1 / o3 / DeepSeek-R1 / Gemini Thinking 等）习惯用
      * {@code {"thoughts": "...", "response": "..."}} 表达"思考 + 回答"，
-     * 而不是协议字段 {@code analysis}。</p>
+     * 而不是协议字段 {@code analysis}。
      */
     private static final List<String> ANALYSIS_FALLBACK_KEYS =
             List.of("response", "text", "content", "output");
@@ -53,16 +51,14 @@ public final class ToolCallParser {
     /**
      * 解析模型原始输出，抽出 {@code tool_calls} 数组里所有合法项。
      *
-     * <p>返回的 {@link Parsed} 携带：</p>
-     * <ul>
-     *   <li>{@link Parsed#toolCalls}：解析出的 {@link ToolCall} 列表；</li>
-     *   <li>{@link Parsed#analysis}：模型同步输出的"中间分析草稿"（可能为 null），用于
-     *       多轮上下文拼接时展示"模型此时在想什么"；</li>
-     *   <li>{@link Parsed#errors}：解析过程中的非致命错误（缺 name / arguments 不是对象等），
-     *       由调用方决定是降级还是写入日志。</li>
-     * </ul>
+     * 返回的 Parsed 携带：
+     *   Parsed.toolCalls：解析出的 ToolCall 列表；
+     *   Parsed.analysis：模型同步输出的"中间分析草稿"（可能为 null），用于
+     *       多轮上下文拼接时展示"模型此时在想什么"；
+     *   Parsed.errors：解析过程中的非致命错误（缺 name / arguments 不是对象等），
+     *       由调用方决定是降级还是写入日志。
      *
-     * <p>本方法不抛异常——模型返回的脏数据应被尽可能兜底处理。</p>
+     * 本方法不抛异常——模型返回的脏数据应被尽可能兜底处理。
      */
     public static Parsed parse(String rawModelOutput) {
         if (rawModelOutput == null || rawModelOutput.isBlank()) {
@@ -192,8 +188,8 @@ public final class ToolCallParser {
      * 读 JSON 对象的字符串字段：只接受 JSON 原始值（字符串/数字/布尔），
      * 对象、数组、null 一律返回 null。
      *
-     * <p>{@code JsonObject#getAsString()} 对非原始值会抛 {@link UnsupportedOperationException}，
-     * 因此本方法必须做类型判定——这是"脏数据不抛异常"契约的实现细节。</p>
+     * {@code JsonObject#getAsString()} 对非原始值会抛 UnsupportedOperationException，
+     * 因此本方法必须做类型判定——这是"脏数据不抛异常"契约的实现细节。
      */
     private static String readString(JsonObject obj, String key) {
         JsonElement elem = obj.get(key);

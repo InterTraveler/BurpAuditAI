@@ -25,16 +25,14 @@ import static org.junit.jupiter.api.Assertions.fail;
 /**
  * {@link WorkflowLogger} 的契约测试。
  *
- * <p>核心契约：</p>
- * <ul>
- *   <li><b>实例 API</b>（{@code appendAgent/appendAi/appendError}）不依赖 ThreadLocal，
- *       在任意线程上调用都能写到同一个 logger 的 buffer；</li>
- *   <li><b>静态 API</b>（{@code logRequest}）仅在绑定的"分析线程"上生效，跨线程调用
- *       静默丢弃（保持旧行为，避免回归）；</li>
- *   <li>{@code buffer} 在并发 append 下不丢数据也不破坏 XML 结构；</li>
- *   <li>{@link WorkflowLogger#readTrail(Path)} 能解析 instance API 写出的 XML，包括
- *       AI 响应里嵌套的 message（choices[0].message）。</li>
- * </ul>
+ * 核心契约：
+ *   实例 API（{@code appendAgent/appendAi/appendError}）不依赖 ThreadLocal，
+ *       在任意线程上调用都能写到同一个 logger 的 buffer；
+ *   静态 API（{@code logRequest}）仅在绑定的"分析线程"上生效，跨线程调用
+ *       静默丢弃（保持旧行为，避免回归）；
+ *   {@code buffer} 在并发 append 下不丢数据也不破坏 XML 结构；
+ *   {@link WorkflowLogger#readTrail(Path)} 能解析 instance API 写出的 XML，包括
+ *       AI 响应里嵌套的 message（choices[0].message）。
  */
 class WorkflowLoggerTest {
 
@@ -239,10 +237,10 @@ class WorkflowLoggerTest {
     /**
      * 模型响应里含 C0 控制字符时，写出的 XML 必须仍可解析。
      *
-     * <p>回归用例：JSON 转义 {@code "\u0001"} 经 Gson 还原成真实控制字符，而 XML 1.0
+     * 回归用例：JSON 转义 {@code "\u0001"} 经 Gson 还原成真实控制字符，而 XML 1.0
      * 既不允许它直接出现、也无法用字符引用表示——原样写盘会让整份 audit-trail 解析失败
      * （{@code readTrail} 抛 SAXException → IOException），UI 表现为"链路追踪打不开"。
-     * 这里断言的是"能读回来"这一行为，而不是具体丢弃策略。</p>
+     * 这里断言的是"能读回来"这一行为，而不是具体丢弃策略。
      */
     @Test
     void readTrail_survivesControlCharactersInResponse() throws IOException {
@@ -268,8 +266,8 @@ class WorkflowLoggerTest {
     /**
      * JSON key 不是合法 XML 名时（数字开头、含空格、含 {@code <}），写出的 XML 必须仍可解析。
      *
-     * <p>回归用例：{@code writeJsonValue} 直接把 JSON key 当元素名，模型返回
-     * {@code {"1st": ...}} / {@code {"user name": ...}} 会产出非法 XML。</p>
+     * 回归用例：{@code writeJsonValue} 直接把 JSON key 当元素名，模型返回
+     * {@code {"1st": ...}} / {@code {"user name": ...}} 会产出非法 XML。
      */
     @Test
     void readTrail_survivesInvalidJsonKeysAsElementNames() throws IOException {
@@ -294,8 +292,8 @@ class WorkflowLoggerTest {
     /**
      * 缓冲超上限后丢弃后续块，但仍写出结构合法、带截断标记的 XML。
      *
-     * <p>上限是私有的 4M 字符常量，这里用一个明显超过它的块来触发；断言目标是
-     * "XML 仍可解析 + 有截断标记 + 后续块确实被丢弃"，不耦合具体阈值。</p>
+     * 上限是私有的 4M 字符常量，这里用一个明显超过它的块来触发；断言目标是
+     * "XML 仍可解析 + 有截断标记 + 后续块确实被丢弃"，不耦合具体阈值。
      */
     @Test
     void writeTo_truncatesOversizedBufferButKeepsXmlValid() throws IOException {

@@ -9,8 +9,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
  * {@link MultipartBodyParser#extractBoundary(String)} 单元测试：覆盖 quoted /
  * unquoted / 大小写 / 多参数 / null 等边界。
  *
- * <p>该方法是 package-private 的纯字符串解析函数，便于在不带 Burp 运行时的环境下单测。
- * 完整 multipart 解析（parse / serialize）依赖 Montoya 的 HttpRequest，本测试不覆盖。</p>
+ * 该方法是 package-private 的纯字符串解析函数，便于在不带 Burp 运行时的环境下单测。
+ * 完整 multipart 解析（parse / serialize）依赖 Montoya 的 HttpRequest，本测试不覆盖。
  */
 final class MultipartBodyParserTest {
 

@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * {@link TextUtil} 单元测试。
  *
- * <p>测试全部为纯函数测试，不依赖 Burp 运行时，可在 mvn test 阶段独立执行。</p>
+ * 测试全部为纯函数测试，不依赖 Burp 运行时，可在 mvn test 阶段独立执行。
  */
 class TextUtilTest {
 
@@ -32,8 +32,8 @@ class TextUtilTest {
      * 截断点恰好落在代理对中间（maxChars=1，文本首字符是 emoji）时，
      * 必须回退到 emoji 之前，结果不得以孤立高代理结尾。
      *
-     * <p>回归用例：历史实现判定的是"保留区内部的 cut-2/cut-1 是完整代理对"，
-     * 方向写反——真正被切开的代理对反而没被处理。</p>
+     * 回归用例：历史实现判定的是"保留区内部的 cut-2/cut-1 是完整代理对"，
+     * 方向写反——真正被切开的代理对反而没被处理。
      */
     @Test
     void truncate_neverSplitsSurrogatePair() {
@@ -48,8 +48,8 @@ class TextUtilTest {
      * 保留区正好落在完整代理对之后（maxChars=4，文本是两个 emoji）时，
      * 两个 emoji 都应被完整保留（不能被"回退一个 code unit"砍掉一半）。
      *
-     * <p>回归用例：历史实现会把这种情况误判成"落在代理对中间"，
-     * 于是把第二个 emoji 的低代理砍掉，产出孤立高代理。</p>
+     * 回归用例：历史实现会把这种情况误判成"落在代理对中间"，
+     * 于是把第二个 emoji 的低代理砍掉，产出孤立高代理。
      */
     @Test
     void truncate_keepsCompleteSurrogatePair() {

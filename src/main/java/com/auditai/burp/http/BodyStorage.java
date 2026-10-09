@@ -21,7 +21,7 @@ import java.util.zip.GZIPInputStream;
 
 /**
  * 读盘解压 + 超大 body 有界保护 + JSON 结构化裁剪。
- * 写盘（gzip + SHA-256 文件名去重）由 {@link com.auditai.burp.history.AnalysisHistoryStore} 私有实现负责，
+ * 写盘（gzip + SHA-256 文件名去重）由 com.auditai.burp.history.AnalysisHistoryStore 私有实现负责，
  * 本类不重复造。
  */
 public final class BodyStorage {
@@ -154,8 +154,8 @@ public final class BodyStorage {
     /**
      * 按 UTF-8 字节数把字符串截断到不超过 {@code maxBytes}，且不切断多字节字符。
      *
-     * <p>实现要点：UTF-8 里"续字节"的高两位是 {@code 10}，出现续字节说明截断点落在
-     * 某个多字节字符内部，向前回退到该字符的首字节即可，结果不会产生 U+FFFD。</p>
+     * 实现要点：UTF-8 里"续字节"的高两位是 {@code 10}，出现续字节说明截断点落在
+     * 某个多字节字符内部，向前回退到该字符的首字节即可，结果不会产生 U+FFFD。
      */
     static String truncateToUtf8Bytes(String value, int maxBytes) {
         byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
@@ -181,7 +181,7 @@ public final class BodyStorage {
 
     /**
      * {@code target} 在 {@code source} 中首次出现的下标，未找到返回 -1。
-     * 委托 {@link java.util.Arrays#mismatch} 走 JDK 9+ 的向量化实现，比手写 O(n·m) 快。
+     * 委托 java.util.Arrays.mismatch 走 JDK 9+ 的向量化实现，比手写 O(n·m) 快。
      */
     private static int indexOf(byte[] source, byte[] target) {
         if (target.length == 0) {

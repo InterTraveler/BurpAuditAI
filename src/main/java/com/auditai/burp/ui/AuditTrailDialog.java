@@ -25,18 +25,18 @@ import java.util.Locale;
 import java.util.function.Consumer;
 
 /**
- * "链路追踪"窗口：以独立 {@link JFrame} 展示一条历史记录对应的 audit-trail XML。
+ * "链路追踪"窗口：以独立 JFrame 展示一条历史记录对应的 audit-trail XML。
  *
- * <p><b>为什么用 {@code JFrame} 而不是 {@code JDialog}</b>：{@code JDialog} 没有原生
+ * <b>为什么用 {@code JFrame} 而不是 {@code JDialog}</b>：{@code JDialog} 没有原生
  * "最大化"按钮（{@code Frame.MAXIMIZED_BOTH} 那一套 API 在 JDialog 上没有），用户期望
  * "右上角关闭按钮的左边"那个标准最大化按钮，只有 JFrame 自带。JFrame 本身非模态
- * （modal 是 Dialog 概念），满足"非模态弹出新窗口"的需求。</p>
+ * （modal 是 Dialog 概念），满足"非模态弹出新窗口"的需求。
  *
- * <p><b>数据来源</b>：{@link AnalysisHistoryEntry#getAuditTrailFile()}；每次打开都通过
- * {@link WorkflowLogger#readTrail(Path)} 实时解析，<b>不</b>做缓存，保证看到的就是磁盘上
- * 最新的轨迹内容。</p>
+ * <b>数据来源</b>：AnalysisHistoryEntry.getAuditTrailFile()；每次打开都通过
+ * WorkflowLogger.readTrail(Path) 实时解析，<b>不</b>做缓存，保证看到的就是磁盘上
+ * 最新的轨迹内容。
  *
- * <p><b>渲染规则</b>：从 XML 中提取的每条 {@link TrailMessage} 按其 {@link Source} 着色：</p>
+ * <b>渲染规则</b>：从 XML 中提取的每条 TrailMessage 按其 Source 着色：
  * <ul>
  *   <li>agent（请求侧）→ 宝蓝色 {@code #4169E1}；</li>
  *   <li>ai（响应/错误侧）→ 轻珊瑚 {@code #F08080}；</li>
@@ -64,8 +64,8 @@ public final class AuditTrailDialog {
     private AnalysisHistoryEntry currentEntry;
 
     /**
-     * 包级构造器：仅供同包内的 {@code AnalysisHistoryPanel} / {@link #show} 调用。
-     * 外部不应该直接 new——用 {@link #show} 走 EDT 安全路径。
+     * 包级构造器：仅供同包内的 {@code AnalysisHistoryPanel} / show 调用。
+     * 外部不应该直接 new——用 show 走 EDT 安全路径。
      */
     AuditTrailDialog(JFrame owner, AnalysisHistoryEntry entry) {
         // JFrame 本身非模态；标题栏原生带最大化 / 最小化 / 关闭按钮（关闭按钮最右，
@@ -126,7 +126,7 @@ public final class AuditTrailDialog {
     }
 
     /**
-     * 把 entry 解析为 HTML 写进 {@link #textPane}。解析失败时显示一个红字错误提示，
+     * 把 entry 解析为 HTML 写进 textPane。解析失败时显示一个红字错误提示，
      * 仍保留窗口可见，方便用户根据错误信息排查（权限、文件被删、XML 损坏等）。
      */
     private void renderEntry(AnalysisHistoryEntry entry) {
@@ -167,10 +167,10 @@ public final class AuditTrailDialog {
     /**
      * 把一条 message 拼成 HTML 片段：[role] 标签 + content 文本。
      *
-     * <p><b>换行策略（关键：不用 {@code <pre>}）</b>：{@code <pre>} 在 HTMLEditorKit
+     * <b>换行策略（关键：不用 {@code <pre>}）</b>：{@code <pre>} 在 HTMLEditorKit
      * 里有顽固的 nowrap 行为，即便 CSS 设了 {@code white-space: pre-wrap} 也经常
      * 不生效——长 URL / JSON 仍会出现水平滚动条。本方案改用 {@code <div>} + 手动
-     * 把 {@code \n} 替换为 {@code <br>}，再叠加多重断行 CSS：</p>
+     * 把 {@code \n} 替换为 {@code <br>}，再叠加多重断行 CSS：
      * <ul>
      *   <li>{@code word-wrap: break-word} 兼容老旧 LAF；</li>
      *   <li>{@code word-break: break-all} 强制在任意字符间断行，覆盖 base64 /
@@ -196,7 +196,7 @@ public final class AuditTrailDialog {
                 .append("</div>");
     }
 
-    /** 写 HTML 到 {@link #document}：每次都从空文档写入，避免多窗口共用模板时残留。 */
+    /** 写 HTML 到 document：每次都从空文档写入，避免多窗口共用模板时残留。 */
     private void writeHtml(String html) {
         try {
             document.remove(0, document.getLength());
@@ -239,7 +239,7 @@ public final class AuditTrailDialog {
 
     /**
      * 关闭时调用：注销 i18n 监听器，避免扩展卸载后仍持有 frame 引用。
-     * 本身 {@link WindowConstants#DISPOSE_ON_CLOSE} 已处理窗口资源。
+     * 本身 WindowConstants.DISPOSE_ON_CLOSE 已处理窗口资源。
      */
     public void dispose() {
         I18n.get().off(i18nListener);

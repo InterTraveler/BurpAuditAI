@@ -9,17 +9,15 @@ import java.util.Objects;
 /**
  * 单次重放工具调用的执行结果（不可变）。
  *
- * <p>三条来源：</p>
- * <ul>
- *   <li><b>成功</b>：构造时传入 {@link HttpResponse} 与耗时，{@link #error} 为 {@code null}；</li>
- *   <li><b>失败（重放成功但参数替换失败等构造期错误）</b>：{@code response} 为 {@code null}，
- *       {@link #error} 非空，{@link #changes} 反映"在出错之前已应用了哪些 key"；</li>
- *   <li><b>失败（运行时 IO / 解析错误）</b>：同失败分支，{@code changes} 反映已应用的
- *       key 列表。</li>
- * </ul>
+ * 三条来源：
+ *   成功：构造时传入 HttpResponse 与耗时，error 为 {@code null}；
+ *   失败（重放成功但参数替换失败等构造期错误）：{@code response} 为 {@code null}，
+ *       error 非空，changes 反映"在出错之前已应用了哪些 key"；
+ *   失败（运行时 IO / 解析错误）：同失败分支，{@code changes} 反映已应用的
+ *       key 列表。
  *
- * <p>{@link #changes} 让上层（{@code ReplayTool}）能拼出"key=old → key=new (location=...)"
- * 的可读 diff，写到 DEBUG 日志 / user 段末尾——不需要再访问 {@code HttpRequest}。</p>
+ * changes 让上层（{@code ReplayTool}）能拼出"key=old → key=new (location=...)"
+ * 的可读 diff，写到 DEBUG 日志 / user 段末尾——不需要再访问 {@code HttpRequest}。
  */
 public final class ReplayResult {
 

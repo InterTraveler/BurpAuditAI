@@ -28,10 +28,10 @@ import java.util.stream.Stream;
 /**
  * 技能目录扫描与解析器。
  *
- * <p>每个技能以一个独立目录呈现，目录名即技能 id；目录下必须有且仅有一个
- * {@code SKILL.md} 文件（大小写敏感）。文件格式：</p>
+ * 每个技能以一个独立目录呈现，目录名即技能 id；目录下必须有且仅有一个
+ * {@code SKILL.md} 文件（大小写敏感）。文件格式：
  *
- * <pre>{@code
+ * {@code
  * ---
  * name: <必填，显示名>
  * icon: <可选，单字符>
@@ -42,44 +42,38 @@ import java.util.stream.Stream;
  * ---
  *
  * <Markdown 正文 = Skill.prompt() 内容>
- * }</pre>
+ * }
  *
- * <p>YAML 标量风格支持：</p>
- * <ul>
- *   <li>{@code |} 字面块标量——保留换行，块内容缩进 ≥ 2 空格；</li>
- *   <li>{@code '...'} 单引号标量——内部 {@code '} 用 {@code ''} 转义；</li>
- *   <li>{@code "..."} 双引号标量——不做转义解析；</li>
- *   <li>裸标量——用于不含特殊字符的短标识。</li>
- * </ul>
+ * YAML 标量风格支持：
+ *   {@code |} 字面块标量——保留换行，块内容缩进 ≥ 2 空格；
+ *   {@code '...'} 单引号标量——内部 {@code '} 用 {@code ''} 转义；
+ *   {@code "..."} 双引号标量——不做转义解析；
+ *   裸标量——用于不含特殊字符的短标识。
  *
- * <p>键名归一化为小写后查找（{@code findingType} 与 {@code findingtype} 等价）。
+ * 键名归一化为小写后查找（{@code findingType} 与 {@code findingtype} 等价）。
  * frontmatter 之外的 YAML 概念（嵌套、引用、tag 等）不支持——本项目的元数据
- * 需求被刻意收窄到上面 6 个字段。</p>
+ * 需求被刻意收窄到上面 6 个字段。
  *
- * <p>本类同时支持两种来源、两种目录形态：</p>
- * <ul>
- *   <li><b>来源</b>：内置（SkillSource#BUILTIN，classpath:/skills/）/
- *       用户自定义（SkillSource#USER，<code><数据根>/.../custom-skills/</code>，数据根见 SessionPaths 类）；</li>
- *   <li><b>形态</b>：分层（{@code <root>/<category>/<id>/SKILL.md}，
+ * 本类同时支持两种来源、两种目录形态：
+ *   来源：内置（SkillSource#BUILTIN，classpath:/skills/）/
+ *       用户自定义（SkillSource#USER，<数据根>/.../custom-skills/，数据根见 SessionPaths 类）；
+ *   形态：分层（{@code <root>/<category>/<id>/SKILL.md}，
  *       category ∈ {vuln, auxiliary}）/ 扁平（{@code <root>/<id>/SKILL.md}，
- *       用户自定义技能专用）。</li>
- * </ul>
+ *       用户自定义技能专用）。
  *
- * <p><b>分层目录约定</b>（内置）：技能根目录下按用途分两类子目录——</p>
- * <ul>
- *   <li><code>skills/vuln/&lt;id&gt;/SKILL.md</code>：漏洞检测类技能；</li>
- *   <li><code>skills/auxiliary/&lt;id&gt;/SKILL.md</code>：辅助类技能（不直接产出 finding）。</li>
- * </ul>
+ * 分层目录约定（内置）：技能根目录下按用途分两类子目录——
+ *   skills/vuln/&lt;id&gt;/SKILL.md：漏洞检测类技能；
+ *   skills/auxiliary/&lt;id&gt;/SKILL.md：辅助类技能（不直接产出 finding）。
  *
- * <p>为了兼容历史布局，<b>顶层 <code>skills/&lt;id&gt;/SKILL.md</code></b> 也会被加载
+ * 为了兼容历史布局，顶层 skills/&lt;id&gt;/SKILL.md 也会被加载
  * （视为"未分类"）。其它任意命名的子目录（如 {@code _deprecated/}、{@code experimental/}）
- * 会被自动跳过；超过两层的嵌套一律忽略——便于做下架 / 实验而不必删文件。</p>
+ * 会被自动跳过；超过两层的嵌套一律忽略——便于做下架 / 实验而不必删文件。
  *
- * <p><b>扁平目录约定</b>（用户）：<code>custom-skills/&lt;id&gt;/SKILL.md</code>，
- * 直接以目录名作为 id，不区分分类。</p>
+ * 扁平目录约定（用户）：custom-skills/&lt;id&gt;/SKILL.md，
+ * 直接以目录名作为 id，不区分分类。
  *
- * <p>解析失败（IO 错误、缺 {@code ---} 边界、缺 {@code name} 字段）的文件会被跳过。
- * 同名 id 时 SkillSource#USER 覆盖 SkillSource#BUILTIN；同来源重复只保留第一次。</p>
+ * 解析失败（IO 错误、缺 {@code ---} 边界、缺 {@code name} 字段）的文件会被跳过。
+ * 同名 id 时 SkillSource#USER 覆盖 SkillSource#BUILTIN；同来源重复只保留第一次。
  */
 public final class SkillLoader {
 
@@ -88,8 +82,8 @@ public final class SkillLoader {
 
     /**
      * 单个扫描根：URL + 来源标签 + 形态（分层 / 扁平）。
-     * 分层：扫描 <code>root</code> 本身 + <code>root/vuln/</code> + <code>root/auxiliary/</code>；
-     * 扁平：仅扫描 <code>root</code> 本身（用户自定义技能无分类下放）。
+     * 分层：扫描 root 本身 + root/vuln/ + root/auxiliary/；
+     * 扁平：仅扫描 root 本身（用户自定义技能无分类下放）。
      */
     private record Root(URL url, SkillSource source, boolean flat) { }
 
@@ -192,7 +186,7 @@ public final class SkillLoader {
      *
      * @param directoryName  classpath 中的内置技能目录名（如 {@code "skills"}）。
      * @param classLoader    用于查找 classpath 资源的类加载器；null 时使用上下文类加载器。
-     * @param userDirectory  用户自定义技能目录（<code>custom-skills/</code>），可为 null；
+     * @param userDirectory  用户自定义技能目录（custom-skills/），可为 null；
      *                       不存在时降级为仅 classpath。
      * @param errorLogger    错误/诊断日志回调（不允许 null）。
      */
@@ -426,14 +420,14 @@ public final class SkillLoader {
     /**
      * 把 SKILL.md 文本拆成 frontmatter 字符串 + body 字符串，再做后续解析。
      *
-     * <p>行尾容错：Windows 上写出的文件是 {@code \r\n}，剥离每个被切出行的尾随 {@code \r}
+     * 行尾容错：Windows 上写出的文件是 {@code \r\n}，剥离每个被切出行的尾随 {@code \r}
      * 再做 {@code line.equals("---")} 等字面比较——避免 CRLF 平台下的
-     * "永远匹配不上 {@code ---}" 假阴性。</p>
+     * "永远匹配不上 {@code ---}" 假阴性。
      *
-     * <p>块标量（{@code key: |}）的内容会"透传"到 frontmatter 字符串里——避免把块内的
+     * 块标量（{@code key: |}）的内容会"透传"到 frontmatter 字符串里——避免把块内的
      * 缩进行误识别为新字段或闭合 {@code ---}。具体做法：扫描到 {@code key: |} 行后，
      * 继续吞下所有缩进 ≥ 块缩进的行（含空行）追加到 frontmatter；遇到 {@code ---} 行时
-     * 回退一格，把 {@code ---} 留给外层循环识别为 frontmatter 闭合。</p>
+     * 回退一格，把 {@code ---} 留给外层循环识别为 frontmatter 闭合。
      */
     private static Skill parseSkillMd(String id, String content, SkillSource source) {
         if (!content.startsWith("---")) {
@@ -538,10 +532,10 @@ public final class SkillLoader {
     /**
      * 把 frontmatter 字符串解析成 {@code key → value} 映射。键统一小写；值保留原文。
      *
-     * <p>支持：块标量（{@code key: |} 或 {@code key: >}）、单引号标量
+     * 支持：块标量（{@code key: |} 或 {@code key: >}）、单引号标量
      * （{@code key: 'value'}）、双引号标量（{@code key: "value"}，不做转义解析）、
      * 裸标量（{@code key: value}）。其它 YAML 特性（嵌套、列表、tag）不支持——
-     * 本项目的元数据需求被刻意收窄。</p>
+     * 本项目的元数据需求被刻意收窄。
      */
     private static Map<String, String> parseFrontmatter(String text) {
         Map<String, String> result = new LinkedHashMap<>();
@@ -649,12 +643,12 @@ public final class SkillLoader {
     /**
      * 把一份 SKILL.md 字符串解析成 Skill，仅用于"导入前的内容校验"。
      *
-     * <p>本方法暴露 #parseSkillMd 的核心解析能力——CustomSkillStore
+     * 本方法暴露 #parseSkillMd 的核心解析能力——CustomSkillStore
      * 在把用户选中的文件落盘前先调一次，确保内容本身可解析（避免写入后下次扫描报
-     * "无法解析 SKILL.md"）。返回的 Skill 仅用于判定合法性，不参与实际渲染。</p>
+     * "无法解析 SKILL.md"）。返回的 Skill 仅用于判定合法性，不参与实际渲染。
      *
-     * <p>来源固定为 SkillSource#USER（导入路径默认就是用户技能）；
-     * 测试或内置路径请直接调 #load()。</p>
+     * 来源固定为 SkillSource#USER（导入路径默认就是用户技能）；
+     * 测试或内置路径请直接调 #load()。
      *
      * @param id      技能 id（仅参与解析，不读文件）。
      * @param content SKILL.md 文本。

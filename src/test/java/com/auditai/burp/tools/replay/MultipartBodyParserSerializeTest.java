@@ -12,16 +12,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * {@link MultipartBodyParser} 的 parse → serialize <b>字节级</b>回归测试。
+ * {@link MultipartBodyParser} 的 parse → serialize 字节级回归测试。
  *
- * <p>为什么必须做字节级断言：{@code ReplayServiceTest} 里对 multipart 替换的断言只检查
+ * 为什么必须做字节级断言：{@code ReplayServiceTest} 里对 multipart 替换的断言只检查
  * "新值子串是否存在"，因此历史上 {@code Part} 存错偏移（存了 header 起点而 serialize
  * 期望 value 起点）时，替换后的 body 会丢掉被替换 part 的整个 {@code Content-Disposition}
  * 头、且相邻 part 之间丢一个 {@code \r\n}，而测试依然全绿——模型看到"替换成功"、
- * 实际发出去的却是畸形报文。本测试用整段等值比较把这类缺陷钉死。</p>
+ * 实际发出去的却是畸形报文。本测试用整段等值比较把这类缺陷钉死。
  *
- * <p>纯字节入口 {@link MultipartBodyParser#parseBody(byte[], String)} 不依赖 Montoya
- * 运行时对象工厂，因此可在无 Burp 环境下直接断言。</p>
+ * 纯字节入口 {@link MultipartBodyParser#parseBody(byte[], String)} 不依赖 Montoya
+ * 运行时对象工厂，因此可在无 Burp 环境下直接断言。
  */
 final class MultipartBodyParserSerializeTest {
 

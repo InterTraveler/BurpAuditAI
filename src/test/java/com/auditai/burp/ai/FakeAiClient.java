@@ -10,18 +10,18 @@ import java.util.concurrent.CompletableFuture;
 /**
  * 脚本化假 AI 客户端（测试用，不联网）。
  *
- * <p>按调用顺序依次返回预置的 JSON 文本，并记录调用次数与最近一次收到的 messages
- * （供断言与复盘）。<b>不重复打印 messages 全文</b>：报文全文与模型响应已由
+ * 按调用顺序依次返回预置的 JSON 文本，并记录调用次数与最近一次收到的 messages
+ * （供断言与复盘）。不重复打印 messages 全文：报文全文与模型响应已由
  * TrafficAnalyzer 的 DEBUG 日志（logRoundStart / logRoundResponse）完整输出
- * （需开启 {@code auditai.debug.prompt}），这里只打一行调用摘要避免控制台噪音。</p>
+ * （需开启 {@code auditai.debug.prompt}），这里只打一行调用摘要避免控制台噪音。
  *
- * <p>只实现 {@link #completeJsonAsync}——单轮与两阶段的 JSON 模式调用都走它；
+ * 只实现 {@link #completeJsonAsync}——单轮与两阶段的 JSON 模式调用都走它；
  * {@link #complete} / {@link #completeAsync} 抛 {@link UnsupportedOperationException}
- * （测试流程用不到）。</p>
+ * （测试流程用不到）。
  *
- * <p><b>为什么本类必须放在 {@code com.auditai.burp.ai} 包内</b>：{@link CancellableAiCall}
+ * 为什么本类必须放在 {@code com.auditai.burp.ai} 包内：{@link CancellableAiCall}
  * 的构造器是包私有的（{@code new CancellableAiCall(future, mapper)}），只有同包代码
- * 能构造可用的返回句柄。</p>
+ * 能构造可用的返回句柄。
  */
 public final class FakeAiClient implements AiClient {
 

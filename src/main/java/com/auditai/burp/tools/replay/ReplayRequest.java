@@ -8,14 +8,14 @@ import java.util.Objects;
 /**
  * 模型在单次重放工具调用中提交的"要重放的请求"参数（不可变）。
  *
- * <p>对应 {@code replay.skill} 中描述的 {@code replay_request.arguments} 字段。</p>
+ * 对应 {@code replay.skill} 中描述的 {@code replay_request.arguments} 字段。
  *
- * <p><b>协议设计（v3：按位置分类的参数替换）</b></p>
+ * 协议设计（v3：按位置分类的参数替换）
  *
- * <p>从 v3 开始，模型不再用单个扁平的 {@code replace_params}，而是按 HTTP 报文中
- * "参数所在的位置"分六个独立字段提交：</p>
+ * 从 v3 开始，模型不再用单个扁平的 {@code replace_params}，而是按 HTTP 报文中
+ * "参数所在的位置"分六个独立字段提交：
  *
- * <pre>{@code
+ * {@code
  * {
  *   "name": "replay_request",
  *   "arguments": {
@@ -28,41 +28,37 @@ import java.util.Objects;
  *     "replace_multipart_params":   { "file": "shell.php" }  // multipart/form-data 的 part（key=part name）
  *   }
  * }
- * }</pre>
+ * }
  *
- * <p><b>为什么这样设计？</b></p>
- * <ul>
- *   <li><b>容错率高</b>：每个字段只在自己所属的位置查找，不再用"key 撞名 → 优先级兜底"
- *       的隐式约定。模型写错位置会立刻报错，而不是静默命中了一个不在预期位置的同名 key；</li>
- *   <li><b>意图清晰</b>：模型声明"我要改 query 上的 id" vs "我要改 header 里的 id" 是
- *       显式分开的，日志和审计也能直接看到"我到底改了哪几处、各自属于哪一类"；</li>
- *   <li><b>大小可控</b>：模型输出从"整段 HTTP 报文"降到"几个键值对"，节省 token；</li>
- *   <li><b>无引号边界问题</b>：键值都是普通 JSON 字符串，不再需要模型在 JSON 字符串里
- *       转义 HTTP 报文里的引号 / 反斜杠 / 控制字符（SQL 注入 payload 经常带这些）；</li>
- *   <li><b>编码/转义交给 Burp</b>：用 Montoya 的 {@code withParameter} / {@code withUpdatedHeader}
+ * 为什么这样设计？
+ *   容错率高：每个字段只在自己所属的位置查找，不再用"key 撞名 → 优先级兜底"
+ *       的隐式约定。模型写错位置会立刻报错，而不是静默命中了一个不在预期位置的同名 key；
+ *   意图清晰：模型声明"我要改 query 上的 id" vs "我要改 header 里的 id" 是
+ *       显式分开的，日志和审计也能直接看到"我到底改了哪几处、各自属于哪一类"；
+ *   大小可控：模型输出从"整段 HTTP 报文"降到"几个键值对"，节省 token；
+ *   无引号边界问题：键值都是普通 JSON 字符串，不再需要模型在 JSON 字符串里
+ *       转义 HTTP 报文里的引号 / 反斜杠 / 控制字符（SQL 注入 payload 经常带这些）；
+ *   编码/转义交给 Burp：用 Montoya 的 {@code withParameter} / {@code withUpdatedHeader}
  *       改值，URL 编码、JSON 编码、Content-Length 重算等都让 Burp 自己处理，模型只负责
- *       "写值"——避免模型在 payload 里手动加 {@code %27} 之类容易出错。</li>
- * </ul>
+ *       "写值"——避免模型在 payload 里手动加 {@code %27} 之类容易出错。
  *
- * <p><b>查找规则</b>（在 {@code ReplayService} 实现）：</p>
- * <ol>
- *   <li>{@code replace_query_params} 的 key 只在 URL 参数（{@code HttpParameterType.URL}）中查；</li>
- *   <li>{@code replace_form_params} 的 key 只在 form body 参数（{@code HttpParameterType.BODY}）中查；</li>
- *   <li>{@code replace_header_params} 的 key 只在请求头中查（大小写不敏感）；</li>
- *   <li>{@code replace_json_params} 的 key 在 JSON body 参数（{@code HttpParameterType.JSON}）中查，
- *       支持点号路径（如 {@code user.id}）；</li>
- *   <li>{@code replace_path_params} 的 key = URL 路径中某一<b>段的当前字面值</b>
+ * 查找规则（在 {@code ReplayService} 实现）：
+ *   {@code replace_query_params} 的 key 只在 URL 参数（{@code HttpParameterType.URL}）中查；
+ *   {@code replace_form_params} 的 key 只在 form body 参数（{@code HttpParameterType.BODY}）中查；
+ *   {@code replace_header_params} 的 key 只在请求头中查（大小写不敏感）；
+ *   {@code replace_json_params} 的 key 在 JSON body 参数（{@code HttpParameterType.JSON}）中查，
+ *       支持点号路径（如 {@code user.id}）；
+ *   {@code replace_path_params} 的 key = URL 路径中某一段的当前字面值
  *       （不限于最后一段，如 {@code /api/users/123} 可用 key {@code "users"} 或 {@code "123"}），
  *       该段整体替换为新值；支持单段路径（{@code /users}）；要求 URL 不含查询参数
- *       （"path-only" 场景），按字面比较、不做 URL 解码；</li>
- *   <li>{@code replace_multipart_params} 的 key 只在 {@code multipart/form-data} body 的 part
+ *       （"path-only" 场景），按字面比较、不做 URL 解码；
+ *   {@code replace_multipart_params} 的 key 只在 {@code multipart/form-data} body 的 part
  *       里查（key=part 的 {@code Content-Disposition} 里的 name 属性）；请求不是 multipart
- *       → 该分类视为空、模型提交的 key 全部 notFound → 整体拒绝。</li>
- *   <li>任何 key 在自己所属位置找不到 → 整个重放拒绝，错误信息里明确指出"哪个分类的哪个 key 没找到"。</li>
- * </ol>
+ *       → 该分类视为空、模型提交的 key 全部 notFound → 整体拒绝。
+ *   任何 key 在自己所属位置找不到 → 整个重放拒绝，错误信息里明确指出"哪个分类的哪个 key 没找到"。
  *
- * <p>同位置多值参数（如 {@code ?id=1&id=2}）会全部替换为同一新值；如果只想改某一个，目前协议不支持——
- * 这在安全审计里也是罕见诉求。</p>
+ * 同位置多值参数（如 {@code ?id=1&id=2}）会全部替换为同一新值；如果只想改某一个，目前协议不支持——
+ * 这在安全审计里也是罕见诉求。
  */
 public final class ReplayRequest {
 
@@ -230,9 +226,9 @@ public final class ReplayRequest {
         /**
          * 简洁展示：用于 DEBUG 日志 / 摘要。
          *
-         * <p>格式 {@code - location[ key ]: old → new}，每个改动一行。{@code [ ]} 把 location
+         * 格式 {@code - location[ key ]: old → new}，每个改动一行。{@code [ ]} 把 location
          * 与 key 绑在一起，避免行尾括号歧义；{@code key} 只写一次，省 token。
-         * 原值为 null 时显示 {@code (无)}——区分"原本就没有"和"原值是空串"。</p>
+         * 原值为 null 时显示 {@code (无)}——区分"原本就没有"和"原值是空串"。
          */
         public String shortSummary() {
             return "- " + location + "[ " + key + " ]: "

@@ -12,14 +12,12 @@ import java.util.regex.Pattern;
 /**
  * 文本处理工具集。全部为静态方法，禁止实例化。
  *
- * <p>核心目的：控制送进大模型的报文体积与敏感信息暴露面——</p>
- * <ul>
- *   <li>{@link #truncate}：超长文本截断，避免把几 MB 的报文整段发给模型（既烧 token 又易超限）；</li>
- *   <li>{@link #redactHeaderValue}：对 Authorization / Cookie / API Key 等敏感头打码，
- *       防止密钥在分析过程中泄露给第三方模型服务；</li>
- *   <li>{@link #safeBody}：把字节数组转为可读文本；二进制内容（图片、压缩包等）
- *       用占位描述代替，不让乱码污染提示词。</li>
- * </ul>
+ * 核心目的：控制送进大模型的报文体积与敏感信息暴露面——
+ *   truncate：超长文本截断，避免把几 MB 的报文整段发给模型（既烧 token 又易超限）；
+ *   redactHeaderValue：对 Authorization / Cookie / API Key 等敏感头打码，
+ *       防止密钥在分析过程中泄露给第三方模型服务；
+ *   safeBody：把字节数组转为可读文本；二进制内容（图片、压缩包等）
+ *       用占位描述代替，不让乱码污染提示词。
  */
 public final class TextUtil {
 
@@ -34,7 +32,7 @@ public final class TextUtil {
      * 并开启 {@code disableHtmlEscaping}（即关闭 Gson 的 HTML 转义），避免
      * {@code =}/{@code <}/{@code >} 被写成 {@code \u003d} 这类冗长 Unicode 形式
      * （占字符又没可读性）。Gson 内部对
-     * {@link com.google.gson.JsonObject} 的迭代是按插入序的，所以输出顺序与解析前
+     * com.google.gson.JsonObject 的迭代是按插入序的，所以输出顺序与解析前
      * 保持一致——方便对照"模型原始 JSON 字段顺序"。
      */
     private static final Gson PRETTY_GSON = new GsonBuilder()
@@ -49,10 +47,10 @@ public final class TextUtil {
      * 需要打码的敏感头名称（不区分大小写）。
      * 覆盖常见的认证与会话凭据载体；如需扩展可在此追加。
      *
-     * <p>被提升为 {@code public} 供 {@code TrafficCompactor} 复用——
+     * 被提升为 {@code public} 供 {@code TrafficCompactor} 复用——
      * "哪些头属于敏感"是协议层面的判断，必须只有一份事实，避免两处判定不一致
      * （比如 {@code TrafficCompactor} 把 {@code X-Token} 视为敏感而
-     * {@code PromptBuilder} 漏判）。</p>
+     * {@code PromptBuilder} 漏判）。
      */
     public static final Pattern SENSITIVE_HEADER_PATTERN = Pattern.compile(
             "(?i)(authorization|auth|cookie|set-cookie|key|token|session|sid|signature|sign|sig|secret|bearer|jwt|ticket|nonce|otp|passcode|password|passwd|hash|fingerprint|credential|cert)");
@@ -64,10 +62,10 @@ public final class TextUtil {
     /**
      * 判定指定头名是否属于"敏感头"（需要脱敏）。
      *
-     * <p>复用同一份 {@link #SENSITIVE_HEADER_PATTERN}，使脱敏策略只在一处定义。
-     * 使用 {@link java.util.regex.Matcher#find()} 而不是 {@code matches()}，
+     * 复用同一份 SENSITIVE_HEADER_PATTERN，使脱敏策略只在一处定义。
+     * 使用 java.util.regex.Matcher.find() 而不是 {@code matches()}，
      * 确保像 {@code X-Authorization}、{@code Proxy-Authorization}、
-     * {@code X-Auth-Token} 这类带前缀的常见敏感头也能被识别。</p>
+     * {@code X-Auth-Token} 这类带前缀的常见敏感头也能被识别。
      *
      * @param headerName 头名称（可为 null）。
      * @return 命中关键字时返回 true。
@@ -79,8 +77,8 @@ public final class TextUtil {
     /**
      * 截断长文本：保留前 maxChars 个字符，并追加说明以提示原文被截断。
      *
-     * <p>截断点按 UTF-16 code point 边界对齐：若恰好落在增补字符（emoji 等）的
-     * 代理对中间，则回退一个 code unit，避免产生孤立代理导致后续编码出现 U+FFFD。</p>
+     * 截断点按 UTF-16 code point 边界对齐：若恰好落在增补字符（emoji 等）的
+     * 代理对中间，则回退一个 code unit，避免产生孤立代理导致后续编码出现 U+FFFD。
      *
      * @param text     原文（可为 null，按空串处理）。
      * @param maxChars 保留的最大字符数；小于等于 0 时返回空串（不抛异常）。
@@ -106,13 +104,13 @@ public final class TextUtil {
     }
 
     /**
-     * 敏感头脱敏：头名称<b>包含</b> {@link #SENSITIVE_HEADER_PATTERN} 中任一关键字，
+     * 敏感头脱敏：头名称包含 SENSITIVE_HEADER_PATTERN 中任一关键字，
      * 其值整体替换为掩码。
      *
-     * <p>使用 {@link java.util.regex.Matcher#find()} 而不是 {@code matches()}，确保
+     * 使用 java.util.regex.Matcher.find() 而不是 {@code matches()}，确保
      * 像 {@code X-Authorization}、{@code Proxy-Authorization}、{@code X-Auth-Token}
      * 这类带前缀的常见敏感头也能被识别（{@code matches()} 要求整个字符串完全匹配，
-     * 会漏掉这类头）。</p>
+     * 会漏掉这类头）。
      *
      * @param headerName  头名称。
      * @param headerValue 头值（可为 null）。
@@ -128,8 +126,8 @@ public final class TextUtil {
     /**
      * 报文体安全转换：检测二进制内容，避免把乱码/超大文本直接拼进提示词。
      *
-     * <p>检测方法：取前 512 字节样本，统计空字节与不可打印字符占比，
-     * 超过阈值即判定为二进制。文本内容则按 UTF-8 解码并截断。</p>
+     * 检测方法：取前 512 字节样本，统计空字节与不可打印字符占比，
+     * 超过阈值即判定为二进制。文本内容则按 UTF-8 解码并截断。
      *
      * @param body 原始报文 body（可为空数组）。
      * @return 可安全放入提示词的文本描述。
@@ -148,10 +146,10 @@ public final class TextUtil {
     /**
      * 二进制嗅探：对 body 开头一段字节做可打印性抽样。
      *
-     * <p>比较一律按<b>无符号</b>字节进行（{@code b & 0xFF}）：UTF-8 多字节字符的
+     * 比较一律按无符号字节进行（{@code b & 0xFF}）：UTF-8 多字节字符的
      * 字节（0x80-0xFF）在 signed 视角下是负数，若按 signed 比较会把中文/日文/emoji
      * 正文误判为二进制。0x80-0xFF 均视为合法 UTF-8 组成部分，只把真正的控制字符
-     * （0x00-0x1F，常见空白除外）计为可疑。</p>
+     * （0x00-0x1F，常见空白除外）计为可疑。
      *
      * @param body 要检测的字节数组。
      * @return 如果样本中可疑字节比例超过阈值则返回 true。
@@ -176,13 +174,13 @@ public final class TextUtil {
     /**
      * 把单行 JSON 文本"美化"为多行可读格式，仅供 DEBUG 日志展示。
      *
-     * <p>模型在 {@code completeJsonAsyncWithFallback} 阶段已经解析过一次，本方法
+     * 模型在 {@code completeJsonAsyncWithFallback} 阶段已经解析过一次，本方法
      * 在 DEBUG 输出时再 parse 一次 + pretty-print 一次——代价在测试中 < 1ms，
      * 对线上性能无感知；好处是"模型到底回了什么 JSON"一眼看清（默认是大段单行，
-     * 关键字段被淹没在长字符串里）。</p>
+     * 关键字段被淹没在长字符串里）。
      *
-     * <p>解析失败时<b>原样回退</b>输出，不抛异常——DEBUG 日志绝不能因为美化失败
-     * 而把"原始 raw 响应"也一起丢掉（排错时最需要看的恰恰是那个非 JSON 字符串）。</p>
+     * 解析失败时原样回退输出，不抛异常——DEBUG 日志绝不能因为美化失败
+     * 而把"原始 raw 响应"也一起丢掉（排错时最需要看的恰恰是那个非 JSON 字符串）。
      *
      * @param raw 模型原始 JSON 响应（可能为 null / 空 / 非 JSON）。
      * @return 美化后的 JSON；非 JSON 或空输入时回退为原文。

@@ -46,33 +46,26 @@ import java.util.Set;
 /**
  * SKILLS 页签主体：网格摆放技能卡片，顶部展示技能数量与说明。
  *
- * <p>布局：</p>
- * <ul>
- *   <li>整个页签用 {@link CardLayout} 在两张卡之间切换：
- *     <ul>
- *       <li>{@code "list"}：原技能列表——顶部页头（标题"技能" + 副标题行内左起依次为
- *           "添加技能"按钮、"共 N 个技能（已启用 M）"），中部 {@link SkillGridPanel}（内含 {@link WrapLayout}）
+ * 布局：
+ *   整个页签用 CardLayout 在两张卡之间切换：
+ *       {@code "list"}：原技能列表——顶部页头（标题"技能" + 副标题行内左起依次为
+ *           "添加技能"按钮、"共 N 个技能（已启用 M）"），中部 SkillGridPanel（内含 WrapLayout）
  *           横向流式排卡片（内置技能在上、分割线、用户技能在下），
- *           底部状态栏（空目录时显示"暂无技能"提示等）；</li>
- *       <li>{@code "detail"}：{@link SkillDetailPanel}——点击卡片后切到此处展示完整字段，
- *           左上角"← 返回"按钮触发后切回 {@code "list"}。</li>
- *     </ul>
- *   </li>
- * </ul>
+ *           底部状态栏（空目录时显示"暂无技能"提示等）；
+ *       {@code "detail"}：SkillDetailPanel——点击卡片后切到此处展示完整字段，
+ *           左上角"← 返回"按钮触发后切回 {@code "list"}。
  *
- * <p>加载约定：技能解析（classpath 扫描 + 文件解析）走 {@link SwingWorker} 后台线程，
- * 完成后切回 EDT 重建网格，避免极端情况下（classpath 大量条目）首次打开页签卡顿。</p>
+ * 加载约定：技能解析（classpath 扫描 + 文件解析）走 SwingWorker 后台线程，
+ * 完成后切回 EDT 重建网格，避免极端情况下（classpath 大量条目）首次打开页签卡顿。
  *
- * <p>交互约定：</p>
- * <ul>
- *   <li><b>左键</b>：切换到详情页（{@link #showSkillDetails}）；</li>
- *   <li><b>右键</b>：根据当前状态显示"启用 / 禁用"切换项；用户技能额外显示"卸载"项，
- *       内置技能的"卸载"项置灰不可点；</li>
- *   <li><b>顶部"添加技能"按钮</b>：弹文件选择器选 .md → 弹 id 输入对话框 → 调
- *       {@link CustomSkillStore#install} 落盘 → 重新加载并 Toast 反馈；</li>
- *   <li>启用态通过 {@link SkillStateStore} 持久化到 Burp Preferences（首次安装走
- *       {@link DefaultEnabledSkill} 默认集，之后尊重用户选择）。</li>
- * </ul>
+ * 交互约定：
+ *   左键：切换到详情页（showSkillDetails）；
+ *   右键：根据当前状态显示"启用 / 禁用"切换项；用户技能额外显示"卸载"项，
+ *       内置技能的"卸载"项置灰不可点；
+ *   顶部"添加技能"按钮：弹文件选择器选 .md → 弹 id 输入对话框 → 调
+ *       CustomSkillStore.install 落盘 → 重新加载并 Toast 反馈；
+ *   启用态通过 SkillStateStore 持久化到 Burp Preferences（首次安装走
+ *       DefaultEnabledSkill 默认集，之后尊重用户选择）。
  */
 public final class SkillsPanel extends JPanel implements LocaleAware {
 
@@ -122,7 +115,7 @@ public final class SkillsPanel extends JPanel implements LocaleAware {
     /**
      * 启用态注册表：key = 技能 id，value = true。
      * 缺省所有技能都是禁用——首次加载时被扫到的技能若未在此表内则视为禁用。
-     * 切换时只更新本表与对应 {@link SkillCard}，不重建网格。
+     * 切换时只更新本表与对应 SkillCard，不重建网格。
      */
     private final Map<String, Boolean> enabledIds = new HashMap<>();
 
@@ -139,10 +132,10 @@ public final class SkillsPanel extends JPanel implements LocaleAware {
     /**
      * @param loader          技能加载器；推荐用
      *                        {@code SkillLoader.fromClasspath("skills", getClass().getClassLoader())}。
-     *                        加载器会扫描 <code>skills/</code> 根目录以及约定的
-     *                        <code>skills/vuln/</code>、<code>skills/auxiliary/</code>
+     *                        加载器会扫描 skills/ 根目录以及约定的
+     *                        skills/vuln/、skills/auxiliary/
      *                        两个子目录，其它子目录自动跳过。
-     * @param stateStore      启用态持久化仓库；首次安装时返回 {@link DefaultEnabledSkill#ids()}，
+     * @param stateStore      启用态持久化仓库；首次安装时返回 DefaultEnabledSkill.ids()，
      *                        之后返回用户持久化的状态。
      * @param customSkillStore 用户技能文件系统仓库；可为 null（不允许用户导入）。为 null 时
      *                        顶部"添加技能"按钮隐藏、右键"卸载"项不显示。
@@ -246,8 +239,8 @@ public final class SkillsPanel extends JPanel implements LocaleAware {
     /**
      * "添加技能"按钮回调：弹文件选择器 → 让用户确认 id → 写入 store → 重新加载网格。
      *
-     * <p>全程在 EDT 上同步进行；最重的操作（{@link SkillLoader#load()}）仍走 SwingWorker，
-     * 避免大目录扫描时 UI 卡顿。</p>
+     * 全程在 EDT 上同步进行；最重的操作（SkillLoader.load()）仍走 SwingWorker，
+     * 避免大目录扫描时 UI 卡顿。
      */
     void onAddSkillClicked() {
         if (customSkillStore == null) {
@@ -313,7 +306,7 @@ public final class SkillsPanel extends JPanel implements LocaleAware {
     }
 
     /**
-     * 用 {@link SkillLoader#parseForInstallCheck} 解析 SKILL.md 文本，只取 name 字段。
+     * 用 SkillLoader.parseForInstallCheck 解析 SKILL.md 文本，只取 name 字段。
      * 解析失败返回 null（让上层报错"缺 name"）。
      */
     private static String extractNameFromContent(String content) {
@@ -328,8 +321,8 @@ public final class SkillsPanel extends JPanel implements LocaleAware {
     /**
      * 卸载用户技能回调：弹确认对话框 → 用户确认后调 store 卸载 → 重新加载。
      *
-     * <p>二次确认（{@link JOptionPane#showConfirmDialog}）防误删；用户点"取消"或
-     * 直接关窗都不动数据。</p>
+     * 二次确认（JOptionPane.showConfirmDialog）防误删；用户点"取消"或
+     * 直接关窗都不动数据。
      */
     void onUninstall(Skill skill) {
         if (customSkillStore == null || skill.source() != SkillSource.USER) {
@@ -422,11 +415,11 @@ public final class SkillsPanel extends JPanel implements LocaleAware {
     }
 
     /**
-     * 重新扫描并刷新整个网格：清空旧卡片、把每个技能渲染为 {@link SkillCard}，更新计数与状态。
+     * 重新扫描并刷新整个网格：清空旧卡片、把每个技能渲染为 SkillCard，更新计数与状态。
      *
-     * <p>{@link #render} 只在空态 / 错误分支刷新 {@link #statusLabel}；非空分支保留现有
-     * 文本，由 {@link #flashStatus} 触发的 Toast/Timer 自行管理生命周期——避免一次成功
-     * 提示被紧接着的扫描覆盖。</p>
+     * render 只在空态 / 错误分支刷新 statusLabel；非空分支保留现有
+     * 文本，由 flashStatus 触发的 Toast/Timer 自行管理生命周期——避免一次成功
+     * 提示被紧接着的扫描覆盖。
      */
     public void reload() {
         // 取消上一轮未完成的扫描，避免旧任务回调覆盖新一次扫描的渲染结果。
@@ -520,9 +513,9 @@ public final class SkillsPanel extends JPanel implements LocaleAware {
     /**
      * 内置 / 用户分割线：横贯整个内容栈宽度，左侧小标签 + 右侧细线。
      *
-     * <p>用自定义 paintComponent 直接把标签画在 (8, vertical-center)、把细线画在
+     * 用自定义 paintComponent 直接把标签画在 (8, vertical-center)、把细线画在
      * (labelWidth, vertical-center) 到 (width, vertical-center)。完全绕开 BorderLayout /
-     * BoxLayout 在不同 L&F 与容器尺寸下"标签被推到中间"的隐式分配问题。</p>
+     * BoxLayout 在不同 L&F 与容器尺寸下"标签被推到中间"的隐式分配问题。
      */
     private static JPanel buildSectionDivider() {
         return new DividerPanel();
@@ -530,11 +523,9 @@ public final class SkillsPanel extends JPanel implements LocaleAware {
 
     /**
      * 自绘分隔线面板：
-     * <ul>
-     *   <li>文字"自定义"在 x=8 垂直居中；</li>
-     *   <li>细线从标签右侧 8px 处到面板右边缘；</li>
-     *   <li>用 {@link JSeparator} 取主题色（避免硬编码让暗色主题下看不见）。</li>
-     * </ul>
+     *   文字"自定义"在 x=8 垂直居中；
+     *   细线从标签右侧 8px 处到面板右边缘；
+     *   用 JSeparator 取主题色（避免硬编码让暗色主题下看不见）。
      */
     private static final class DividerPanel extends JPanel {
         @Serial
@@ -617,9 +608,9 @@ public final class SkillsPanel extends JPanel implements LocaleAware {
      * SkillCard 在自己的右键菜单里已经调过 setEnabled 刷新了 UI，
      * 这里只负责把"全局状态"和"持久化"职责收口。
      *
-     * <p><b>同步清理自动激活：</b>若用户从"自动激活"卡片选了"禁用"，SkillCard.setSkillEnabled(false)
+     * 同步清理自动激活：若用户从"自动激活"卡片选了"禁用"，SkillCard.setSkillEnabled(false)
      * 已同步清掉本地 pinned 字段；这里也要同步把 id 从 pinnedIds 集合移除并持久化，
-     * 否则下次启动会出现"pinned=true 但 enabled=false"的脏状态。</p>
+     * 否则下次启动会出现"pinned=true 但 enabled=false"的脏状态。
      */
     void onToggle(Skill skill, boolean enabled) {
         if (enabled) {
@@ -651,17 +642,17 @@ public final class SkillsPanel extends JPanel implements LocaleAware {
     /**
      * 收到卡片的"切换自动激活态"回调：更新 pinnedIds 集合、持久化。
      *
-     * <p>SkillCard 在右键菜单里已经处理了"自动激活隐含启用"的副作用（包括触发
-     * {@link #onToggle(Skill, boolean)}），本方法只同步注册表 + 持久化 + 刷新卡片本地
-     * 视觉（如果是从其它路径触发的）。</p>
+     * SkillCard 在右键菜单里已经处理了"自动激活隐含启用"的副作用（包括触发
+     *  #onToggle(Skill, boolean)），本方法只同步注册表 + 持久化 + 刷新卡片本地
+     * 视觉（如果是从其它路径触发的）。
      *
-     * <p><b>上限拦截：</b>把第 {@value #MAX_PINNED}+1 个技能设为自动激活时拒绝，
+     * 上限拦截：把第 {@value #MAX_PINNED}+1 个技能设为自动激活时拒绝，
      * 弹 toast 提示用户并把卡片本地状态回滚——避免 UI 出现"卡片已 pin 但注册表没记"的
-     * 不一致。解除自动激活时不受此限制。</p>
+     * 不一致。解除自动激活时不受此限制。
      *
-     * <p><b>解除自动激活时</b>只清掉 pinnedIds，<b>不</b>联动 enabledIds——语义上
+     * 解除自动激活时只清掉 pinnedIds，不联动 enabledIds——语义上
      * "取消自动激活"只是不再常驻注入，技能本身仍可处于普通启用态（让用户继续
-     * 在 phase 1 候选中看到它）。</p>
+     * 在 phase 1 候选中看到它）。
      */
     void onPin(Skill skill, boolean pinned) {
         if (pinned) {
@@ -704,7 +695,7 @@ public final class SkillsPanel extends JPanel implements LocaleAware {
                 : I18n.get().t("ui.skills.countEnabled", total, enabledCount);
     }
 
-    /** 从注册表抽出所有启用 id，按 {@link DefaultEnabledSkill#ids()} 顺序优先、其余 id 按字典序追加。 */
+    /** 从注册表抽出所有启用 id，按 DefaultEnabledSkill.ids() 顺序优先、其余 id 按字典序追加。 */
     private Set<String> extractEnabledIds() {
         Set<String> result = new LinkedHashSet<>();
         for (String id : DefaultEnabledSkill.ids()) {
@@ -722,7 +713,7 @@ public final class SkillsPanel extends JPanel implements LocaleAware {
 
     /**
      * 点击卡片后：把"列表"卡整体替换为"详情"卡，展示技能完整信息。
-     * 详情卡上的"← 返回"按钮回调 {@link #showList()} 切回列表。
+     * 详情卡上的"← 返回"按钮回调 showList() 切回列表。
      */
     void showSkillDetails(Skill skill) {
         // 移除旧的详情卡（如果有），放一张新的——保证每次展示的是最新数据
@@ -774,14 +765,14 @@ public final class SkillsPanel extends JPanel implements LocaleAware {
     }
 
     /**
-     * 内容栈 Scrollable 适配器：把 {@link BoxLayout#Y_AXIS} 包装栈标记为
-     * "宽度跟随视口"，让 {@link javax.swing.JScrollPane} 把本栈钉在视口宽度上。
+     * 内容栈 Scrollable 适配器：把 BoxLayout.Y_AXIS 包装栈标记为
+     * "宽度跟随视口"，让 javax.swing.JScrollPane 把本栈钉在视口宽度上。
      *
-     * <p>为什么需要：栈内 {@link SkillGridPanel} 用 {@link WrapLayout}，
+     * 为什么需要：栈内 SkillGridPanel 用 WrapLayout，
      * WrapLayout 在容器 width=0 时按"一行铺所有卡片"算 preferredSize，会把整排卡片
      * 算成几千像素宽——撑出横向滚动条。让本栈标记 tracksViewportWidth 后，
      * JScrollPane 先把栈 width 钉到视口宽、再让 BoxLayout 把两个网格都拉满到该宽度，
-     * 两个网格的 WrapLayout 才能拿到真实宽度做"一行几个"的换行计算。</p>
+     * 两个网格的 WrapLayout 才能拿到真实宽度做"一行几个"的换行计算。
      */
     private static final class SkillsStackPanel extends JPanel implements javax.swing.Scrollable {
         @Serial

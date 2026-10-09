@@ -5,16 +5,14 @@ import java.util.Objects;
 /**
  * 一次工具调用的执行结果（不可变）。
  *
- * <p>两条来源：</p>
- * <ul>
- *   <li><b>成功</b>：构造时传非空 {@link #userPromptFragment}；{@link #error} 为 {@code null}；</li>
- *   <li><b>失败</b>：构造时传非空 {@link #error}；{@link #userPromptFragment} 是给模型看的
- *       "工具调用失败说明"占位文本（让模型能看到失败原因决定下一步是重试还是收尾）。</li>
- * </ul>
+ * 两条来源：
+ *   成功：构造时传非空 userPromptFragment；error 为 {@code null}；
+ *   失败：构造时传非空 error；userPromptFragment 是给模型看的
+ *       "工具调用失败说明"占位文本（让模型能看到失败原因决定下一步是重试还是收尾）。
  *
- * <p>{@link #userPromptFragment} 是 orchestrator 直接追加到 user 段的"原始片段"——
+ * userPromptFragment 是 orchestrator 直接追加到 user 段的"原始片段"——
  * 工具实现负责按统一格式渲染（含脱敏、截断、占位符等），orchestrator 不做二次加工。
- * 这与 OpenAI Function Calling 里"tool result 是一段 message string"的设计一致。</p>
+ * 这与 OpenAI Function Calling 里"tool result 是一段 message string"的设计一致。
  *
  * @param success             是否执行成功
  * @param userPromptFragment  成功：要回填给模型的描述；失败：给模型的失败说明

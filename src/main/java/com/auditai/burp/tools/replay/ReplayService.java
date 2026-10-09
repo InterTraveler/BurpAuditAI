@@ -20,45 +20,41 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * "重放请求"工具执行器：把模型提交的"按位置分类的参数替换"应用到<b>原请求</b>上，
+ * "重放请求"工具执行器：把模型提交的"按位置分类的参数替换"应用到原请求上，
  * 再通过 Burp Montoya API 真实发送出去，并把响应回填给模型。
  *
- * <p><b>v3 协议：按位置分类的参数替换</b></p>
+ * v3 协议：按位置分类的参数替换
  *
- * <p>从 v3 开始，模型不再用单个扁平的 {@code replace_params}，而是按 HTTP 报文中
- * "参数所在的位置"分六个独立字段提交：</p>
+ * 从 v3 开始，模型不再用单个扁平的 {@code replace_params}，而是按 HTTP 报文中
+ * "参数所在的位置"分六个独立字段提交：
  *
- * <ul>
- *   <li>{@code replace_query_params}     →  只匹配 URL 参数（{@code ?k=v}）</li>
- *   <li>{@code replace_form_params}      →  只匹配 form body（{@code application/x-www-form-urlencoded}）</li>
- *   <li>{@code replace_header_params}    →  只匹配请求头（大小写不敏感）</li>
- *   <li>{@code replace_json_params}      →  只匹配 JSON body 字段（支持点号路径 {@code user.id}）</li>
- *   <li>{@code replace_path_params}      →  只匹配 URL 路径的某段当前字面值（path-only 场景）</li>
- *   <li>{@code replace_multipart_params} →  只匹配 {@code multipart/form-data} body 的 part
+ *   {@code replace_query_params}     →  只匹配 URL 参数（{@code ?k=v}）
+ *   {@code replace_form_params}      →  只匹配 form body（{@code application/x-www-form-urlencoded}）
+ *   {@code replace_header_params}    →  只匹配请求头（大小写不敏感）
+ *   {@code replace_json_params}      →  只匹配 JSON body 字段（支持点号路径 {@code user.id}）
+ *   {@code replace_path_params}      →  只匹配 URL 路径的某段当前字面值（path-only 场景）
+ *   {@code replace_multipart_params} →  只匹配 {@code multipart/form-data} body 的 part
  *       （key = part 的 {@code Content-Disposition} 里的 name 属性）；请求不是 multipart
- *       → 该分类视为空、提交的 key 全部 notFound → 整体拒绝</li>
- * </ul>
+ *       → 该分类视为空、提交的 key 全部 notFound → 整体拒绝
  *
- * <p>每个字段的 key 只在它"应该"出现的位置查找——不再有"header → query → body → json → cookie"
+ * 每个字段的 key 只在它"应该"出现的位置查找——不再有"header → query → body → json → cookie"
  * 那种隐式优先级。模型把 key 放错位置就直接报错（哪个分类、哪个 key、提示它
- * 正确位置有哪些 key 可用），避免静默命中"看起来名字一样但语义不同"的同名 key。</p>
+ * 正确位置有哪些 key 可用），避免静默命中"看起来名字一样但语义不同"的同名 key。
  *
- * <p>优势：</p>
- * <ul>
- *   <li>不再需要模型在 JSON 字符串里转义 HTTP 报文里的引号 / 反斜杠 / 控制字符；</li>
- *   <li>URL 编码、JSON 编码、Content-Length 重算交给 Burp 自动处理；</li>
- *   <li>无法跨 host/port/scheme 重放——HttpService 始终继承自原请求；</li>
- *   <li>DEBUG 输出"key=old → key=new (location=query|form|header|json|path|multipart)"清晰可读。</li>
- * </ul>
+ * 优势：
+ *   不再需要模型在 JSON 字符串里转义 HTTP 报文里的引号 / 反斜杠 / 控制字符；
+ *   URL 编码、JSON 编码、Content-Length 重算交给 Burp 自动处理；
+ *   无法跨 host/port/scheme 重放——HttpService 始终继承自原请求；
+ *   DEBUG 输出"key=old → key=new (location=query|form|header|json|path|multipart)"清晰可读。
  *
- * <p><b>同位置多值参数</b>（如 {@code ?id=1&id=2}）：全部替换为同一新值；如果只想改
- * 某一个，目前协议不支持——这在安全审计里也是罕见诉求。</p>
+ * 同位置多值参数（如 {@code ?id=1&id=2}）：全部替换为同一新值；如果只想改
+ * 某一个，目前协议不支持——这在安全审计里也是罕见诉求。
  */
 public final class ReplayService {
 
     /**
-     * "构造新 HttpParameter"的注入点——生产用 {@link HttpParameter#parameter(String, String, HttpParameterType)}，
-     * 测试可注入一个返回代理 {@link HttpParameter} 的实现，避开 Burp 内部工厂（{@code MontoyaObjectFactory}
+     * "构造新 HttpParameter"的注入点——生产用  HttpParameter#parameter(String, String, HttpParameterType)，
+     * 测试可注入一个返回代理 HttpParameter 的实现，避开 Burp 内部工厂（{@code MontoyaObjectFactory}
      * 在脱离 Burp 运行时为 null）。
      */
     @FunctionalInterface
@@ -71,7 +67,7 @@ public final class ReplayService {
             (name, value, type) -> HttpParameter.parameter(name, value, type);
 
     /**
-     * "构造新 ByteArray"的注入点——生产用 {@link ByteArray#byteArray(byte...)}，
+     * "构造新 ByteArray"的注入点——生产用 ByteArray.byteArray(byte...)，
      * 测试可注入一个不依赖 MontoyaObjectFactory 的实现（{@code MontoyaObjectFactory.FACTORY}
      * 在脱离 Burp 运行时为 null，调用 {@code ByteArray.byteArray} 会 NPE）。
      */
@@ -89,7 +85,7 @@ public final class ReplayService {
     private final HttpRequest originalRequest;
     /** "构造新参数"工厂：可注入以支持脱离 Burp 运行时的测试。 */
     private final HttpParameterBuilder parameterBuilder;
-    /** "构造新 ByteArray"工厂：同 {@link #parameterBuilder} 的设计目的——multipart 重写 body 用。 */
+    /** "构造新 ByteArray"工厂：同 parameterBuilder 的设计目的——multipart 重写 body 用。 */
     private final ByteArrayFactory byteArrayFactory;
 
     public ReplayService(MontoyaApi api, HttpRequest originalRequest) {
@@ -103,7 +99,7 @@ public final class ReplayService {
 
     /**
      * 完整构造器：注入两个工厂以支持测试。
-     * 生产路径用 {@link #ReplayService(MontoyaApi, HttpRequest)} 即可。
+     * 生产路径用  #ReplayService(MontoyaApi, HttpRequest) 即可。
      */
     public ReplayService(MontoyaApi api, HttpRequest originalRequest,
                          HttpParameterBuilder parameterBuilder,
@@ -120,11 +116,11 @@ public final class ReplayService {
     /**
      * 执行一次重放：把 {@code req} 指定的 6 类参数替换应用到原请求上，发送出去，并返回结果。
      *
-     * <p>本方法是本类对外暴露的<b>唯一</b>执行入口；{@code ToolLoopOrchestrator}
-     * 负责在多轮循环中调用本方法并管理预算。</p>
+     * 本方法是本类对外暴露的唯一执行入口；{@code ToolLoopOrchestrator}
+     * 负责在多轮循环中调用本方法并管理预算。
      *
      * @param req 模型提交的"要重放的请求"。
-     * @return 执行结果（成功 / 失败 / 异常 三种情况都封装在 {@link ReplayResult} 里）。
+     * @return 执行结果（成功 / 失败 / 异常 三种情况都封装在 ReplayResult 里）。
      */
     public ReplayResult execute(ReplayRequest req) {
         Objects.requireNonNull(req, "req");
@@ -176,19 +172,17 @@ public final class ReplayService {
     /**
      * 把 6 类参数替换应用到 {@code original} 上，构造新请求。
      *
-     * <p>实现要点：</p>
-     * <ul>
-     *   <li>每类参数的 key 只在它"应属"的位置查（query → URL 参数；form → BODY 参数；
-     *       header → 请求头；json → JSON 参数；path → URL 路径段值；multipart → body part name）；</li>
-     *   <li>用 Montoya 的 {@code withParameter(HttpParameter)} / {@code withUpdatedHeader}
-     *       原子改值——Burp 负责 URL 编码、JSON 编码、Content-Length 重算；</li>
-     *   <li>HttpService 始终继承自 {@code original}，模型无法跨服务重放；</li>
-     *   <li>任何一类的 key 在自己位置找不到 → 抛 {@link IllegalArgumentException}，
-     *       由 {@link #execute} 转成 {@link ReplayResult#failure}。错误信息会明确告诉
-     *       模型"哪个分类、哪个 key、当前请求里这个位置实际有哪些 key 可用"；</li>
-     *   <li>所有类的 key 总数受 {@link #MAX_REPLACE_KEYS} 限制；新值字节总数受
-     *       {@link #MAX_NEW_VALUE_BYTES} 限制（防 OOM / 防滥用）。</li>
-     * </ul>
+     * 实现要点：
+     *   每类参数的 key 只在它"应属"的位置查（query → URL 参数；form → BODY 参数；
+     *       header → 请求头；json → JSON 参数；path → URL 路径段值；multipart → body part name）；
+     *   用 Montoya 的 {@code withParameter(HttpParameter)} / {@code withUpdatedHeader}
+     *       原子改值——Burp 负责 URL 编码、JSON 编码、Content-Length 重算；
+     *   HttpService 始终继承自 {@code original}，模型无法跨服务重放；
+     *   任何一类的 key 在自己位置找不到 → 抛 IllegalArgumentException，
+     *       由 execute 转成 ReplayResult.failure。错误信息会明确告诉
+     *       模型"哪个分类、哪个 key、当前请求里这个位置实际有哪些 key 可用"；
+     *   所有类的 key 总数受 MAX_REPLACE_KEYS 限制；新值字节总数受
+     *       MAX_NEW_VALUE_BYTES 限制（防 OOM / 防滥用）。
      *
      * @param original     原请求；为 null 时抛 IAE（execute 已处理）
      * @param queryParams  要替换的 URL 参数；可为空 Map
@@ -321,14 +315,12 @@ public final class ReplayService {
     }
 
     /**
-     * 按 {@link HttpParameterType} 对 newValue 做"wire-ready"编码：
-     * <ul>
-     *   <li>{@code URL} / {@code BODY}：{@link URLEncoder#encode(String, java.nio.charset.Charset)}
-     *       — 处理空格 / 单引号 / `=` / `&` 等保留 / 不安全字符；</li>
-     *   <li>{@code JSON}：JSON 字符串字面量（首尾双引号 + 内部 `"` `\` 控制字符转义），
-     *       对齐 Montoya 把 JSON param 视为"已 JSON-encoded 字符串"的契约；</li>
-     *   <li>其它类型：原样返回（防御兜底）。</li>
-     * </ul>
+     * 按 HttpParameterType 对 newValue 做"wire-ready"编码：
+     *   {@code URL} / {@code BODY}： URLEncoder#encode(String, java.nio.charset.Charset)
+     *       — 处理空格 / 单引号 / `=` / `&` 等保留 / 不安全字符；
+     *   {@code JSON}：JSON 字符串字面量（首尾双引号 + 内部 `"` `\` 控制字符转义），
+     *       对齐 Montoya 把 JSON param 视为"已 JSON-encoded 字符串"的契约；
+     *   其它类型：原样返回（防御兜底）。
      */
     private static String encodeForParamType(String value, HttpParameterType type) {
         if (value == null) {
@@ -368,7 +360,7 @@ public final class ReplayService {
     }
 
     /**
-     * 路径段专用编码：在 {@link URLEncoder#encode(String, java.nio.charset.Charset)} 基础上
+     * 路径段专用编码：在  URLEncoder#encode(String, java.nio.charset.Charset) 基础上
      * 把空格从 {@code +} 换成 {@code %20}（路径里 {@code +} 是字面加号，不能当空格）。
      * 其它字符（{@code '} {@code =} 等）按 percent-encode 处理。模型若要二次编码，
      * 自行按 RFC 3986 在 payload 里预写 %XX，agent 不主动 decode。
@@ -467,18 +459,18 @@ public final class ReplayService {
     /**
      * 按"段值"匹配替换 URL 路径。
      *
-     * <p>协议说明：路径参数（如 REST 风格 {@code /api/users/123} 的 {@code 123}）不在
-     * Burp 的 {@code parameters()} 体系里，需要从 {@link HttpRequest#path()} 字符串里
+     * 协议说明：路径参数（如 REST 风格 {@code /api/users/123} 的 {@code 123}）不在
+     * Burp 的 {@code parameters()} 体系里，需要从 HttpRequest.path() 字符串里
      * 解析。本类按"段值作为 key"匹配：把路径按 {@code /} 切分后，每个非空段都是候选 key；
      * 模型提交的 {@code key} 必须等于某段当前值，匹配后整段被替换为 {@code newValue}。
-     * 同值多段（如 {@code /a/1/b/1}）会全部替换为同一新值，单段路径同样允许。</p>
+     * 同值多段（如 {@code /a/1/b/1}）会全部替换为同一新值，单段路径同样允许。
      *
-     * <p>未命中条件（任一即返回 {@code null}）：路径中没有任何段等于 {@code key}（按字面字符串
-     * 比较，未做 URL 解码）；URL 含查询参数 {@code ?}（按提示词约定，路径参数场景是 path-only）。</p>
+     * 未命中条件（任一即返回 {@code null}）：路径中没有任何段等于 {@code key}（按字面字符串
+     * 比较，未做 URL 解码）；URL 含查询参数 {@code ?}（按提示词约定，路径参数场景是 path-only）。
      *
-     * <p>本方法只返回"新 path + 匹配次数"，由调用方在 {@link #applyReplacements} 里
-     * 按匹配次数造对应数量的 {@link ReplayRequest.ParamChange}——因为同值多段时
-     * 一条 entry 要对应多条 change 记录。</p>
+     * 本方法只返回"新 path + 匹配次数"，由调用方在 applyReplacements 里
+     * 按匹配次数造对应数量的 ReplayRequest.ParamChange——因为同值多段时
+     * 一条 entry 要对应多条 change 记录。
      */
     private PathApplyResult applyPath(HttpRequest req, String key, String newValue) {
         // path-only 场景：URL 含 ? 时不算"路径参数"形态
@@ -516,7 +508,7 @@ public final class ReplayService {
         return new PathApplyResult(updated, matched);
     }
 
-    /** {@link #applyPath} 的返回：新 request + 匹配次数（用于造 N 条 ParamChange）。 */
+    /** applyPath 的返回：新 request + 匹配次数（用于造 N 条 ParamChange）。 */
     private static final class PathApplyResult {
         final HttpRequest request;
         final int matchedCount;
@@ -527,7 +519,7 @@ public final class ReplayService {
     }
 
     /**
-     * {@link #applyMultipart} 的返回：新 request + 已应用的 ParamChange 列表（同 name 多 part
+     * applyMultipart 的返回：新 request + 已应用的 ParamChange 列表（同 name 多 part
      * 会出现多条记录，和 {@code applyPath} 的语义对齐）。
      */
     private static final class MultipartApplyResult {
@@ -542,19 +534,17 @@ public final class ReplayService {
     /**
      * 替换 {@code multipart/form-data} body 的指定 part 的 value。
      *
-     * <p>流程：</p>
-     * <ol>
-     *   <li>用 {@link MultipartBodyParser#parse} 把 body 切成 part 列表；</li>
-     *   <li>对模型提交的每个 key：找同名 part、拼接旧 value 摘要、记录到 ParamChange；
-     *       任何一个 key 一个 part 都找不到 → 返回 {@code null}（整体拒绝）；</li>
-     *   <li>用 {@link MultipartBodyParser#serialize} 重组 body 字节（保留原 part header / boundary 拼写），</li>
-     *   <li>{@code req.withBody(newBytes)} 一次性替换——Montoya 会同步更新 Content-Length。</li>
-     * </ol>
+     * 流程：
+     *   用 MultipartBodyParser.parse 把 body 切成 part 列表；
+     *   对模型提交的每个 key：找同名 part、拼接旧 value 摘要、记录到 ParamChange；
+     *       任何一个 key 一个 part 都找不到 → 返回 {@code null}（整体拒绝）；
+     *   用 MultipartBodyParser.serialize 重组 body 字节（保留原 part header / boundary 拼写），
+     *   {@code req.withBody(newBytes)} 一次性替换——Montoya 会同步更新 Content-Length。
      *
-     * <p>未命中（请求不是 multipart / body 解析失败 / 找不到 name）→ 返回 {@code null}，由
+     * 未命中（请求不是 multipart / body 解析失败 / 找不到 name）→ 返回 {@code null}，由
      * 调用方把所有 key 记到 {@code notFound} 走整体拒绝分支。
      * {@code items == null / empty} 也返回 {@code null}，此时调用方走 {@code safeKeys()}
-     * 不会写出任何 notFound，等价于"零侵入"。</p>
+     * 不会写出任何 notFound，等价于"零侵入"。
      */
     private MultipartApplyResult applyMultipart(HttpRequest req, Map<String, String> items) {
         if (items == null || items.isEmpty()) {
@@ -686,11 +676,11 @@ public final class ReplayService {
     /**
      * 4 类参数替换（query / form / header / json）的共用骨架：遍历 {@code items}，用 {@code fn}
      * 把每个 entry 应用到 {@code current} 上，命中后推进 {@code current} 并追加
-     * {@link ReplayRequest.ParamChange}；未命中则记到 {@code notFound}。返回推进后的 request。
+     * ReplayRequest.ParamChange；未命中则记到 {@code notFound}。返回推进后的 request。
      *
-     * <p>仅适合"单 entry 单 ParamChange"的场景——{@code path} 类同 key 多次匹配会产出
+     * 仅适合"单 entry 单 ParamChange"的场景——{@code path} 类同 key 多次匹配会产出
      * 多条 ParamChange，{@code multipart} 同 name 多 part 时也是多条，签名不通用，
-     * 都走自己循环。</p>
+     * 都走自己循环。
      */
     private static HttpRequest applyAll(HttpRequest current,
                                         Map<String, String> items,
@@ -714,21 +704,19 @@ public final class ReplayService {
     /**
      * 列出原请求里"模型可替换"的所有参数，按类别分组（写到阶段 2 user 段末尾的【可替换参数】清单）。
      *
-     * <p>输出示例：</p>
-     * <pre>
+     * 输出示例：
      * 【可替换参数】
      * - query: id, page
      * - form:  username, password
      * - json:  data.id, data.type
      * - header: User-Agent, X-Token
      * - multipart: file, comment
-     * </pre>
      *
-     * <p>注意：v3 协议不再支持 cookie 字段——改 cookie 用
-     * {@code replace_header_params: {"Cookie": "session=xxx"}}。</p>
+     * 注意：v3 协议不再支持 cookie 字段——改 cookie 用
+     * {@code replace_header_params: {"Cookie": "session=xxx"}}。
      *
-     * <p>静态实现：不依赖 {@code api} / {@code originalRequest} 实例字段，供
-     * {@code ToolLoopOrchestrator} 在"还没构造 {@code ReplayService} 实例"时也能调用。</p>
+     * 静态实现：不依赖 {@code api} / {@code originalRequest} 实例字段，供
+     * {@code ToolLoopOrchestrator} 在"还没构造 {@code ReplayService} 实例"时也能调用。
      *
      * @param original 原请求；null 或无参数时返回空串
      * @return 多行字符串，每行一个类别；空请求时返回空串
@@ -788,7 +776,7 @@ public final class ReplayService {
     /**
      * 提取原请求 URL 路径的"所有非空段值"——按 path 出现顺序保留首次出现（去重）。
      * 若 URL 含 {@code ?} 或路径为空，返回空 Set。
-     * 与 {@link #applyPath} 的识别规则保持一致。
+     * 与 applyPath 的识别规则保持一致。
      */
     private static Set<String> listPathSegments(HttpRequest original) {
         Set<String> out = new LinkedHashSet<>();
@@ -833,7 +821,7 @@ public final class ReplayService {
 
     // —— 内部小数据结构 ——
 
-    /** {@link #applyReplacements} 的返回：构造好的请求 + 变更记录列表。 */
+    /** applyReplacements 的返回：构造好的请求 + 变更记录列表。 */
     static final class BuildOutcome {
         private final HttpRequest request;
         private final List<ReplayRequest.ParamChange> changes;
@@ -852,7 +840,7 @@ public final class ReplayService {
         }
     }
 
-    /** {@link #applyByType} / {@link #applyHeader} 的返回：新请求 + 单条变更记录。 */
+    /** applyByType / applyHeader 的返回：新请求 + 单条变更记录。 */
     private static final class ApplyResult {
         final HttpRequest request;
         final ReplayRequest.ParamChange change;

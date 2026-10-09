@@ -18,8 +18,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * {@link ToolLoopOrchestrator} 核心循环单测。
  *
- * <p>使用 fake AI 客户端（脚本化响应）+ 自定义假 Tool 实现驱动整个循环，验证：
- * 多轮调度、预算硬上限、未注册工具的容错、trace 顺序保留、Outcome 暴露 lastRaw 等核心契约。</p>
+ * 使用 fake AI 客户端（脚本化响应）+ 自定义假 Tool 实现驱动整个循环，验证：
+ * 多轮调度、预算硬上限、未注册工具的容错、trace 顺序保留、Outcome 暴露 lastRaw 等核心契约。
  */
 class ToolLoopOrchestratorTest {
 

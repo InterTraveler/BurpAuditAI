@@ -18,48 +18,42 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /**
- * 被动分析 Proxy 回调：实现 Montoya 的 {@link ProxyRequestHandler} + {@link ProxyResponseHandler}，
+ * 被动分析 Proxy 回调：实现 Montoya 的 ProxyRequestHandler + ProxyResponseHandler，
  * 把"开启开关后才放行"的过滤 + "请求+响应配对" + "指纹去重" + "独立线程池" 全部串起来。
  *
- * <p><b>流程（v2）：</b></p>
- * <ol>
- *   <li>请求到达（Proxy 回调线程）：只做两件廉价的事——跳过静态资源后缀、把"raw 字节 + 元数据"
- *       暂存到 {@code pending}（按 messageId）。<b>不做</b> URL 正则匹配、不做 SHA-256：
+ * 流程（v2）：
+ *   请求到达（Proxy 回调线程）：只做两件廉价的事——跳过静态资源后缀、把"raw 字节 + 元数据"
+ *       暂存到 {@code pending}（按 messageId）。不做 URL 正则匹配、不做 SHA-256：
  *       这些移到响应到达后的工作线程，避免 Proxy 回调线程被大报文哈希卡住，也避免
- *       正则灾难性回溯卡住 Burp 代理转发；</li>
- *   <li>响应到达（Proxy 回调线程）：从 {@code pending} 取到配对请求，复制响应字节后
- *       提交到 {@link PassiveAnalysisExecutor}；pending 找不到配对时直接放行；</li>
- *   <li>工作线程（{@link PassiveAnalysisExecutor}）：先过 {@link UrlRegexFilter}，
- *       再算指纹（{@link RequestFingerprint#compute}，body-only + 大小上限），
- *       {@link FingerprintDedup#markIfNew} 决定是否首次见到——首次才真正调用
- *       {@link PassiveAnalyzer#analyzeAsync} 做 AI 分析；重复/不匹配直接跳过。</li>
- * </ol>
+ *       正则灾难性回溯卡住 Burp 代理转发；
+ *   响应到达（Proxy 回调线程）：从 {@code pending} 取到配对请求，复制响应字节后
+ *       提交到 PassiveAnalysisExecutor；pending 找不到配对时直接放行；
+ *   工作线程（PassiveAnalysisExecutor）：先过 UrlRegexFilter，
+ *       再算指纹（RequestFingerprint.compute，body-only + 大小上限），
+ *       FingerprintDedup.markIfNew 决定是否首次见到——首次才真正调用
+ *       PassiveAnalyzer.analyzeAsync 做 AI 分析；重复/不匹配直接跳过。
  *
- * <p><b>关键设计选择</b>（每条都对应一类已知阻塞 / 资源浪费风险）：</p>
- * <ul>
- *   <li>指纹哈希在工作线程执行——大上传时不会卡住 Proxy 回调线程；</li>
- *   <li>指纹只哈希请求体（不含动态 header）——Cookie / CSRF 等高频变化不会破坏去重；</li>
- *   <li>去重标记推迟到"响应已到达、即将分析"的工作线程——响应永不回调的请求不会永久
- *       占用 dedup，重试同一请求仍会被正常分析；</li>
- *   <li>URL 正则匹配在工作线程执行，并做输入截断——灾难性回溯正则不会阻塞 Burp Proxy；</li>
- *   <li>开关关闭的瞬间清空 pending 快照——避免残留字节与无意义配对。</li>
- * </ul>
+ * 关键设计选择（每条都对应一类已知阻塞 / 资源浪费风险）：
+ *   指纹哈希在工作线程执行——大上传时不会卡住 Proxy 回调线程；
+ *   指纹只哈希请求体（不含动态 header）——Cookie / CSRF 等高频变化不会破坏去重；
+ *   去重标记推迟到"响应已到达、即将分析"的工作线程——响应永不回调的请求不会永久
+ *       占用 dedup，重试同一请求仍会被正常分析；
+ *   URL 正则匹配在工作线程执行，并做输入截断——灾难性回溯正则不会阻塞 Burp Proxy；
+ *   开关关闭的瞬间清空 pending 快照——避免残留字节与无意义配对。
  *
- * <p><b>关键不变量：</b></p>
- * <ul>
- *   <li>开关关闭时（{@link #isActive()} == false）所有回调直接放行，零开销；</li>
- *   <li>pending map 用 LRU 容量 {@value #DEFAULT_PENDING_CAPACITY}——响应永不回调的请求
- *       会被自然淘汰，避免内存泄漏；</li>
- *   <li>dedup LRU 与 pending LRU 是两个独立结构：dedup 防"重复分析"，pending 防"未配对请求泄漏"。</li>
- * </ul>
+ * 关键不变量：
+ *   开关关闭时（isActive() == false）所有回调直接放行，零开销；
+ *   pending map 用 LRU 容量 {@value #DEFAULT_PENDING_CAPACITY}——响应永不回调的请求
+ *       会被自然淘汰，避免内存泄漏；
+ *   dedup LRU 与 pending LRU 是两个独立结构：dedup 防"重复分析"，pending 防"未配对请求泄漏"。
  */
 public final class PassiveAnalysisHandler implements ProxyRequestHandler, ProxyResponseHandler {
 
     /**
      * pending map 容量上限：超过后按访问顺序淘汰最久未见的 messageId。
      *
-     * <p>正常情况下 pending 里的条目只在请求到响应之间短暂存在（毫秒级），2000 足够；
-     * 响应永不回调（连接中断 / Burp 异常）的请求最终会被 LRU 淘汰，内存可控。</p>
+     * 正常情况下 pending 里的条目只在请求到响应之间短暂存在（毫秒级），2000 足够；
+     * 响应永不回调（连接中断 / Burp 异常）的请求最终会被 LRU 淘汰，内存可控。
      */
     static final int DEFAULT_PENDING_CAPACITY = 2_000;
 
@@ -69,7 +63,7 @@ public final class PassiveAnalysisHandler implements ProxyRequestHandler, ProxyR
      */
     static final int MAX_ANALYSIS_BYTES = 10 * 1024 * 1024;
 
-    /** 当前开关 + URL 过滤：UI 改完点"保存被动分析"会调 {@link #updateConfig(boolean, String)}。 */
+    /** 当前开关 + URL 过滤：UI 改完点"保存被动分析"会调  #updateConfig(boolean, String)。 */
     private volatile boolean active;
     private volatile UrlRegexFilter urlFilter;
 
@@ -123,11 +117,11 @@ public final class PassiveAnalysisHandler implements ProxyRequestHandler, ProxyR
     }
 
     /**
-     * 动态更新开关 + URL 过滤：UI 改完"保存被动分析"后调用，<b>不重建 Handler 也不重新注册 Proxy 回调</b>，
+     * 动态更新开关 + URL 过滤：UI 改完"保存被动分析"后调用，不重建 Handler 也不重新注册 Proxy 回调，
      * 避免关闭→开启瞬间丢失正在分析中的请求。
      *
-     * <p>值没有变化时不重复打日志（DocumentListener 防抖之外的最后一道防线）；
-     * 开关从开→关时清空 pending 快照（不再有分析发生，立即释放在途字节）。</p>
+     * 值没有变化时不重复打日志（DocumentListener 防抖之外的最后一道防线）；
+     * 开关从开→关时清空 pending 快照（不再有分析发生，立即释放在途字节）。
      *
      * @param enabled  是否启用被动分析。
      * @param urlRegex URL 过滤正则（空串/null → 匹配全部）。
@@ -298,8 +292,8 @@ public final class PassiveAnalysisHandler implements ProxyRequestHandler, ProxyR
      * 静态资源判定：取 URL 路径最后一段的扩展名，命中白名单（图片 / 字体 / 音视频 /
      * 前端脚本样式 / sourcemap）即视为静态资源。
      *
-     * <p>原 {@code ProxyTrafficCollector.isStaticResource} 已下线；本方法是它的内联版本，
-     * 行为完全一致，供被动分析在请求回调时跳过这些资源。</p>
+     * 原 {@code ProxyTrafficCollector.isStaticResource} 已下线；本方法是它的内联版本，
+     * 行为完全一致，供被动分析在请求回调时跳过这些资源。
      */
     private static boolean isStaticResource(String url) {
         if (url == null) {

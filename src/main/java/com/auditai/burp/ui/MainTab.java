@@ -5,6 +5,7 @@ import burp.api.montoya.http.message.HttpRequestResponse;
 import com.auditai.burp.ai.PromptBuilder;
 import com.auditai.burp.config.Settings;
 import com.auditai.burp.config.SettingsStore;
+import com.auditai.burp.history.AnalysisHistoryEntry;
 import com.auditai.burp.history.AnalysisHistoryStore;
 import com.auditai.burp.http.FindingStore;
 import com.auditai.burp.http.TrafficAnalyzer;
@@ -22,25 +23,25 @@ import java.util.function.Consumer;
 /**
  * 插件主界面：多页签容器。
  *
- * <p>当前包含五个页签，将来可继续扩展（{@link JTabbedPane#addTab} 追加即可）：</p>
+ * 当前包含五个页签，将来可继续扩展（JTabbedPane.addTab 追加即可）：
  * <ul>
- *   <li><b>分析</b>：{@link AnalysisPanel}——报文页签容器（类似 Repeater，每次发送/新建
+ *   <li><b>分析</b>：AnalysisPanel——报文页签容器（类似 Repeater，每次发送/新建
  *       生成编号页签 1、2、3…，每个页签独立分析，可切换查看）；</li>
- *   <li><b>设置</b>：{@link SettingsPanel}——AI 服务、提示词、被动分析、<b>语言切换</b>；</li>
- *   <li><b>历史</b>：{@link AnalysisHistoryPanel}——经 AI 分析模块处理过的报文记录
+ *   <li><b>设置</b>：SettingsPanel——AI 服务、提示词、被动分析、<b>语言切换</b>；</li>
+ *   <li><b>历史</b>：AnalysisHistoryPanel——经 AI 分析模块处理过的报文记录
  *       （手动 / 被动分析）；</li>
- *   <li><b>问题</b>：{@link FindingsPanel}——经模型分析后认为存在 / 可疑的 URL 列表，
+ *   <li><b>问题</b>：FindingsPanel——经模型分析后认为存在 / 可疑的 URL 列表，
  *       下方展示报告 + Request/Response（在"历史"之后）；</li>
- *   <li><b>技能</b>：{@link SkillsPanel}——技能网格，每个技能取自
+ *   <li><b>技能</b>：SkillsPanel——技能网格，每个技能取自
  *       <code>src/main/resources/skills/</code> 目录下的 {@code <id>/SKILL.md}
  *       （含 <code>vuln/</code>、<code>auxiliary/</code> 两个分类子目录）。</li>
  * </ul>
  *
- * <p>本类还对外提供 {@link #acceptMessage(HttpRequestResponse)}：供上下文菜单
- * （"Send to AuditAI"）把其他模块（Proxy 历史、Repeater 等）的报文送入分析页。</p>
+ * 本类还对外提供 acceptMessage(HttpRequestResponse)：供上下文菜单
+ * （"Send to AuditAI"）把其他模块（Proxy 历史、Repeater 等）的报文送入分析页。
  *
- * <p>语言切换的位置在"设置"页签的最后一个模块(由 {@link SettingsPanel} 持有),
- * 这样整体布局与原版一致——只在设置页签底部多出一行"语言: 中文 | English"。</p>
+ * 语言切换的位置在"设置"页签的最后一个模块(由 SettingsPanel 持有),
+ * 这样整体布局与原版一致——只在设置页签底部多出一行"语言: 中文 | English"。
  */
 public final class MainTab extends JTabbedPane implements LocaleAware {
 
@@ -66,7 +67,7 @@ public final class MainTab extends JTabbedPane implements LocaleAware {
      * 本容器自身注册到 I18n 的语言切换监听器：close() 时必须注销，避免插件卸载后
      * I18n 强引用本 MainTab（含 Burp 原生编辑器、SettingsPanel 等重型组件）造成泄漏。
      */
-    private final Consumer<PromptBuilder.Lang> i18nListener = lang -> refreshI18n();
+    private final Consumer<PromptBuilder.Lang> i18nListener = lang->refreshI18n();
 
     /** "分析"页签的索引。 */
     private final int analysisTabIndex;
@@ -90,7 +91,7 @@ public final class MainTab extends JTabbedPane implements LocaleAware {
     private boolean passiveAnalysisInError;
 
     /**
-     * 完整构造器：把分析完成回调（手动分析 → 写历史库）显式注入到分析页。
+     * 完整构造器：把分析完成回调（手动分析->写历史库）显式注入到分析页。
      *
      * @param api              Burp API 门面（用于创建原生报文编辑器等）。
      * @param settings         完整设置（多份 AI 服务配置 + 当前激活 + 全局提示词），设置页读写。
@@ -116,6 +117,8 @@ public final class MainTab extends JTabbedPane implements LocaleAware {
         // 问题页：依赖 historyStore 反查 Request/Response（AnalysisContext 缺失时兜底）；
         // historyStore 为 null 时 Request/Response 页签空。
         this.findingsPanel = new FindingsPanel(api, findingStore, historyStore, this::onFindingsCountChanged);
+        // 历史->问题联动:选中 entry 时把 analysisId 传给 findingsPanel,顺手切到问题页签;entry 为 null 时解开。
+        this.historyPanel.setOnEntrySelectionChanged(this::onHistoryEntrySelectionChanged);
         // 技能页从 classpath:/skills/ 目录扫描 <id>/SKILL.md（含 vuln/、auxiliary/ 子目录），
         // 再叠加 <sessionRoot>/custom-skills/ 作为扁平形态的用户技能根。
         Path userSkillDir = customSkillStore == null ? null : customSkillStore.rootDirectory();
@@ -141,7 +144,7 @@ public final class MainTab extends JTabbedPane implements LocaleAware {
         // 由 findingsCurrentCount 记下，因此这里只是补一次标题刷新。
         findingsPanel.triggerCountCallback();
 
-        // 被动分析错误状态 → 设置页签标题感叹号：透传 SettingsPanel 的回调。
+        // 被动分析错误状态->设置页签标题感叹号：透传 SettingsPanel 的回调。
         // 必须在 addTab 之后注入（settingsTabIndex 已确定），否则第一次回调无法更新标题。
         settingsPanel.setOnPassiveAnalysisErrorChanged(this::onPassiveAnalysisErrorChanged);
         // 启动时如果错误总线已经处于"失败"状态（v1 不持久化，理论上总是 cleared；
@@ -197,13 +200,23 @@ public final class MainTab extends JTabbedPane implements LocaleAware {
         setTitleAt(findingsTabIndex, findingsTabNormalTitle(count));
     }
 
+    /** 历史->问题联动:选中 entry 时设 filter + 切到问题页签;entry 为 null 时清除过滤。 */
+    private void onHistoryEntrySelectionChanged(AnalysisHistoryEntry entry) {
+        if (entry == null) {
+            findingsPanel.clearAnalysisIdFilter();
+            return;
+        }
+        findingsPanel.setAnalysisIdFilter(entry.getAnalysisId());
+        setSelectedComponent(findingsPanel);
+    }
+
     /**
      * 页签索引是否已经指向真实存在的页签。
      *
-     * <p>为什么单独抽成方法：本容器在构造期就会收到子面板的回调，而索引字段那时尚未赋值
+     * 为什么单独抽成方法：本容器在构造期就会收到子面板的回调，而索引字段那时尚未赋值
      * （blank final 的运行时默认值是 <b>0</b>，不是 -1），"<0 即未就绪"这种写法会漏判，
      * 于是 {@code setTitleAt(0,...)} 在 0 个页签时抛 {@code IndexOutOfBoundsException}。
-     * 抽出来后可被单测直接钉住这个不变量。</p>
+     * 抽出来后可被单测直接钉住这个不变量。
      *
      * @param tabIndex 页签索引（构造期可能是未赋值的默认值 0）。
      * @param tabCount 当前实际页签数量。
@@ -225,10 +238,10 @@ public final class MainTab extends JTabbedPane implements LocaleAware {
      * "被动分析错误状态"变化回调:true 时在"设置"页签标题右侧加感叹号 + 警示前缀
      * ("设置 ⚠"),false 时恢复正常标题。
      *
-     * <p>使用 Unicode 字符 ⚠(U+26A0)而非 emoji,Burp 的 LaF 对该字符渲染稳定,
-     * 不会出现方块 / 不同字体下显示不一致。感叹号前后加空格保证视觉分隔。</p>
+     * 使用 Unicode 字符 ⚠(U+26A0)而非 emoji,Burp 的 LaF 对该字符渲染稳定,
+     * 不会出现方块 / 不同字体下显示不一致。感叹号前后加空格保证视觉分隔。
      *
-     * <p>线程:{@link SettingsPanel} 保证在 EDT 上调用本方法。</p>
+     * 线程:SettingsPanel 保证在 EDT 上调用本方法。
      */
     private void onPassiveAnalysisErrorChanged(boolean hasError) {
         this.passiveAnalysisInError = hasError;
@@ -254,9 +267,9 @@ public final class MainTab extends JTabbedPane implements LocaleAware {
      * 定时器、取消在飞行的 SwingWorker、注销 I18n 监听器——避免
      * Burp 重载扩展后残留旧线程与对象图。
      *
-     * <p>最后调 {@link I18n#clearAll()}：主动清空全局订阅表 + 监听器列表，
+     * 最后调 I18n.clearAll()：主动清空全局订阅表 + 监听器列表，
      * 切断对旧 MainTab（含子组件、Burp 原生编辑器等重型对象）的强引用链。
-     * 详细原因见 {@link I18n#clearAll()}。</p>
+     * 详细原因见 I18n.clearAll()。
      */
     public void close() {
         settingsPanel.close();
@@ -272,7 +285,7 @@ public final class MainTab extends JTabbedPane implements LocaleAware {
 
     /**
      * 注册"被动分析配置保存后"的回调(由 {@code AuditAiExtension} 调用):
-     * 透传给 {@link SettingsPanel},让 UI 保存完立刻通知 {@code PassiveAnalysisHandler} 热更新。
+     * 透传给 SettingsPanel,让 UI 保存完立刻通知 {@code PassiveAnalysisHandler} 热更新。
      *
      * @param hook 回调;为 null 表示清空。
      */
@@ -282,12 +295,12 @@ public final class MainTab extends JTabbedPane implements LocaleAware {
 
     /**
      * 注册"手动分析完成"回调(由 {@code AuditAiExtension} 调用):透传到
-     * {@link AnalysisPanel},影响后续新建的 MessageTab。
+     * AnalysisPanel,影响后续新建的 MessageTab。
      *
-     * <p>典型用法:装配方先 new MainTab(hook 尚未就绪)→ addTab → 拿到 historyStore
+     * 典型用法:装配方先 new MainTab(hook 尚未就绪)-> addTab->拿到 historyStore
      * 引用后回填 hook。已有页签的 hook 已在构造期确定,无法回填——所以通常在
-     * 装配方应该用 <b>先 new MainTab → 立即 setOnAnalysisCompleted</b> 的顺序,
-     * 保证用户首次右键发送的报文能进"历史"。</p>
+     * 装配方应该用 <b>先 new MainTab->立即 setOnAnalysisCompleted</b> 的顺序,
+     * 保证用户首次右键发送的报文能进"历史"。
      *
      * @param hook 回调;为 null 表示清空(仅影响后续动态新增的 MessageTab)。
      */

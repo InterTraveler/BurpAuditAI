@@ -12,8 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * {@link DefaultEnabledSkill} 的单元测试。
  *
- * <p>枚举值 id 必须与 {@code src/main/resources/skills/} 下的子目录名
- * 一一对应——否则首次安装后卡片不会被启用，浪费白名单位置。</p>
+ * 枚举值 id 必须与 {@code src/main/resources/skills/} 下的子目录名
+ * 一一对应——否则首次安装后卡片不会被启用，浪费白名单位置。
  */
 class DefaultEnabledSkillTest {
 

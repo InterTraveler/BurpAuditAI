@@ -34,12 +34,11 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * AuditAI 扩展的唯一入口类。
  *
- * <p>Burp 加载插件 JAR 后，会实例化用户在 Extender 页面中指定的类（即本类），
- * 然后调用 {@link #initialize(MontoyaApi)}。因此本方法承担的是"装配"职责：
- * 创建各个组件并把它们按依赖方向连起来，而不是把业务逻辑写在入口里。</p>
+ * Burp 加载插件 JAR 后，会实例化用户在 Extender 页面中指定的类（即本类），
+ * 然后调用 initialize(MontoyaApi)。因此本方法承担的是"装配"职责：
+ * 创建各个组件并把它们按依赖方向连起来，而不是把业务逻辑写在入口里。
  *
- * <p>组件装配关系（依赖自顶向下）：</p>
- * <pre>
+ * 组件装配关系（依赖自顶向下）：
  * AuditAiExtension（入口，装配）
  *   ├── SettingsStore / AiConfig       —— 配置读取与持久化
  *   ├── AiClient                       —— AI 通信抽象（统一 OpenAI 兼容协议）
@@ -51,13 +50,12 @@ import java.util.concurrent.atomic.AtomicLong;
  *   │                                   ＋"问题"页（Finding 列表 + 详情）
  *   │                                   ＋"技能"页（SKILL.md 文件网格）
  *   └── SendToAuditAiMenuProvider      —— 上下文菜单：从其他模块发送报文到分析页
- * </pre>
  *
- * <p>交互模型：分析由<b>用户主动触发</b>（手动）或<b>被动规则触发</b>（被动流量分析），
- * 两路回调统一落到 {@link FindingStore}（"问题"页签）和 {@link AnalysisHistoryStore}
- * （"历史"页签）。</p>
+ * 交互模型：分析由用户主动触发（手动）或被动规则触发（被动流量分析），
+ * 两路回调统一落到 FindingStore（"问题"页签）和 AnalysisHistoryStore
+ * （"历史"页签）。
  *
- * <p>约定：本类只做依赖装配，不写具体业务；后续新增功能应各自独立成包，在这里统一接线。</p>
+ * 约定：本类只做依赖装配，不写具体业务；后续新增功能应各自独立成包，在这里统一接线。
  */
 public final class AuditAiExtension implements BurpExtension {
 
@@ -384,10 +382,10 @@ public final class AuditAiExtension implements BurpExtension {
      * 把 AnalysisResult.getError() 文本（已包含原始异常 message）按用户可读的
      * "下一步该检查什么"分类。
      *
-     * <p>AnalysisResult 的 error 字段是字符串而非 Throwable 链，因此走按消息文本
-     * 分类的路径（{@link PassiveAnalysisErrorClassifier#classifyByMessage}）。
+     * AnalysisResult 的 error 字段是字符串而非 Throwable 链，因此走按消息文本
+     * 分类的路径（PassiveAnalysisErrorClassifier.classifyByMessage）。
      * 之前若在 SettingsPanel 测过连接并被分类，会优先用同款规则归类，
-     * 保证"测试连接"和"被动分析"看到的分类一致。</p>
+     * 保证"测试连接"和"被动分析"看到的分类一致。
      */
     private static PassiveAnalysisErrorBus.ErrorKind classifyPassiveFailure(String errorMessage) {
         return PassiveAnalysisErrorClassifier.classifyByMessage(errorMessage);
@@ -395,7 +393,7 @@ public final class AuditAiExtension implements BurpExtension {
 
     /**
      * 被动分析失败日志的节流器：AI 服务不可用时每个去重通过的请求都会失败一次，
-     * 逐条打 Output 会在扫描器场景刷出几千条日志。策略：每 {@link #WINDOW_MS} 窗口
+     * 逐条打 Output 会在扫描器场景刷出几千条日志。策略：每 WINDOW_MS 窗口
      * 只输出一条完整日志，窗口内的其余失败合并为计数追加到下一条日志里。
      * 线程安全（Atomic 字段），可在分析器线程并发调用。
      */

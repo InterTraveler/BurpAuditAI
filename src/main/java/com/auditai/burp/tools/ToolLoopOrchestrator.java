@@ -25,38 +25,34 @@ import java.util.function.Supplier;
  * 通用"工具循环"编排器：在分析流程里实现 OpenAI Function Calling / Anthropic Tool Use
  * 模式的多轮 agent 循环。
  *
- * <p><b>设计参考</b>：</p>
- * <ul>
- *   <li>OpenAI Function Calling / Anthropic Tool Use —— 模型在每次输出里携带
- *       {@code tool_calls}，由服务端执行后回填到下一轮 user 段；</li>
- *   <li>ReAct / MRKL 范式 —— "思考 → 行动 → 观察 → 思考"的循环；</li>
- *   <li>Burp Repeater 体验 —— 用户在 Repeater 里能反复按"Go"重发修改后的请求，
- *       这里把"按 Go"的能力交给模型自主决策，但<b>限定 3 次预算</b>防止失控。</li>
- * </ul>
+ * 设计参考：
+ *   OpenAI Function Calling / Anthropic Tool Use —— 模型在每次输出里携带
+ *       {@code tool_calls}，由服务端执行后回填到下一轮 user 段；
+ *   ReAct / MRKL 范式 —— "思考 → 行动 → 观察 → 思考"的循环；
+ *   Burp Repeater 体验 —— 用户在 Repeater 里能反复按"Go"重发修改后的请求，
+ *       这里把"按 Go"的能力交给模型自主决策，但限定 3 次预算防止失控。
  *
- * <p><b>工具路由</b>：本类对具体工具（"重放"/"爆破"/"解码"等）完全无感知——
- * 调用方通过构造器注入 {@link Map}{@code <String, Tool>} 工具表，路由逻辑就是
+ * 工具路由：本类对具体工具（"重放"/"爆破"/"解码"等）完全无感知——
+ * 调用方通过构造器注入 Map{@code <String, Tool>} 工具表，路由逻辑就是
  * {@code toolMap.get(call.toolName())}。加新工具 = 加一个 {@code Tool} 实现 + 注册，
- * 本类一行不用改。</p>
+ * 本类一行不用改。
  *
- * <p><b>硬约束</b>：</p>
- * <ol>
- *   <li>总工具调用次数 ≤ {@link #DEFAULT_BUDGET}（3）；预算与 trace 用 {@link AtomicInteger}
- *       / 集合承载，当前由<b>单一分析线程串行调用</b>，原子类型只是为将来并发预留；</li>
- *   <li>单次分析最多循环 {@link #MAX_LOOPS} 轮（8）—— 防止模型"再来一次"无限循环；
- *       超过即强制收尾；</li>
- *   <li>任何一次 AI 调用失败 → 用最后一次成功轮次的 analysis 兜底（与现有
- *       {@code TrafficAnalyzer.analyzeWithSkillSelection} 的回退策略保持一致）。</li>
- * </ol>
+ * 硬约束：
+ *   总工具调用次数 ≤ DEFAULT_BUDGET（3）；预算与 trace 用 AtomicInteger
+ *       / 集合承载，当前由单一分析线程串行调用，原子类型只是为将来并发预留；
+ *   单次分析最多循环 MAX_LOOPS 轮（8）—— 防止模型"再来一次"无限循环；
+ *       超过即强制收尾；
+ *   任何一次 AI 调用失败 → 用最后一次成功轮次的 analysis 兜底（与现有
+ *       {@code TrafficAnalyzer.analyzeWithSkillSelection} 的回退策略保持一致）。
  */
 public final class ToolLoopOrchestrator {
 
     /**
      * 单次分析允许的最大工具调用次数。
      *
-     * <p>业内经验值：3 次足够覆盖"基础验证 → 时间盲注 → 提取数据"这条主线；
+     * 业内经验值：3 次足够覆盖"基础验证 → 时间盲注 → 提取数据"这条主线；
      * 同时也能兜住"误报 / 失败 / 重发"等正常损耗，再多就属于"扫描器"范畴，应交给
-     * Burp 自带的 Intruder 而不是模型循环。</p>
+     * Burp 自带的 Intruder 而不是模型循环。
      */
     public static final int DEFAULT_BUDGET = 3;
 
@@ -90,12 +86,12 @@ public final class ToolLoopOrchestrator {
     /**
      * 完整构造器：注入工具表 + 原始请求 + 初始 user 段 supplier + debug 日志回调。
      *
-     * <p>工具表用 {@link LinkedHashMap} 以保留插入顺序——日志里能看出工具注册顺序。
-     * 工具名重复时后者覆盖前者（与 Map 语义一致）。</p>
+     * 工具表用 LinkedHashMap 以保留插入顺序——日志里能看出工具注册顺序。
+     * 工具名重复时后者覆盖前者（与 Map 语义一致）。
      *
-     * <p>{@code debugLogger} 用于把逐轮 prompt 级细节打到 Burp Output（生产路径注入
+     * {@code debugLogger} 用于把逐轮 prompt 级细节打到 Burp Output（生产路径注入
      * {@code TrafficAnalyzer.debug}，与阶段 1 共用 {@code -Dauditai.debug.prompt}）；
-     * 传 null 时回退到本类自带的 api + 系统属性开关。</p>
+     * 传 null 时回退到本类自带的 api + 系统属性开关。
      */
     public ToolLoopOrchestrator(MontoyaApi api, AiClient aiClient, PromptBuilder promptBuilder,
                                 Map<String, Tool> tools,
@@ -117,7 +113,7 @@ public final class ToolLoopOrchestrator {
         this.debugLogger = debugLogger;
     }
 
-    /** 测试 / 高级用法：注入自定义预算（生产路径用 {@link #DEFAULT_BUDGET}），无 supplier / debug logger。 */
+    /** 测试 / 高级用法：注入自定义预算（生产路径用 DEFAULT_BUDGET），无 supplier / debug logger。 */
     public ToolLoopOrchestrator(MontoyaApi api, AiClient aiClient, PromptBuilder promptBuilder,
                                 Map<String, Tool> tools,
                                 List<Skill> enabledSkills,
@@ -150,15 +146,15 @@ public final class ToolLoopOrchestrator {
     /**
      * 跑完整的多轮循环：发起第一轮 → 解析 → 执行工具调用 → 喂回结果 → 循环 → 收尾。
      *
-     * <p>本方法是阻塞的（与现有 {@code TrafficAnalyzer} 的"分析线程里同步等待"模式一致）；
-     * 调用方应当已经处于分析执行器线程里（不是 EDT）。</p>
+     * 本方法是阻塞的（与现有 {@code TrafficAnalyzer} 的"分析线程里同步等待"模式一致）；
+     * 调用方应当已经处于分析执行器线程里（不是 EDT）。
      *
-     * <p>返回 {@link Outcome} 而不是裸 String：保留最后一轮 AI 调用的原始响应，
+     * 返回 Outcome 而不是裸 String：保留最后一轮 AI 调用的原始响应，
      * 供调用方走统一的 {@code extractFindings} 路径（避免"分析文本里写了 risk=high 但
-     * findings 列表丢"的撕裂感）。</p>
+     * findings 列表丢"的撕裂感）。
      *
      * @param cancelled 取消检查器：每次发起 AI 调用前调用，true 时立即抛
-     *                   {@link AiException} 终止循环。本参数允许 null（永不被取消）。
+     *                   AiException 终止循环。本参数允许 null（永不被取消）。
      * @return 最终结果：分析文本 + 最后一轮 AI 原始响应。
      * @throws AiException AI 调用本身失败时抛出；循环内已成功收尾则不抛。
      */
@@ -338,7 +334,7 @@ public final class ToolLoopOrchestrator {
     }
 
     /**
-     * 把工具调用路由到对应的 {@link Tool} 实现。工具未注册时返回"未注册"失败结果——
+     * 把工具调用路由到对应的 Tool 实现。工具未注册时返回"未注册"失败结果——
      * 而不是抛异常，让循环继续（模型看到后会调整行为）。
      */
     private ToolOutcome dispatchTool(ToolCall call) {
@@ -383,9 +379,9 @@ public final class ToolLoopOrchestrator {
     /**
      * 单次模型 raw 输出在 DEBUG 日志里的最大字符数。
      *
-     * <p>模型一次输出是单个 JSON 对象（analysis 草稿 + tool_calls + risk + findings），
+     * 模型一次输出是单个 JSON 对象（analysis 草稿 + tool_calls + risk + findings），
      * 正常 ≤ 1～2K；这里给 30000 的上限纯粹是兜底防"模型跑飞输出超长文本"时刷爆日志——
-     * 默认尽量完整，调试时一眼能看清"模型到底回了什么 JSON"。</p>
+     * 默认尽量完整，调试时一眼能看清"模型到底回了什么 JSON"。
      */
     private static final int RAW_DEBUG_CHARS = 30_000;
 
@@ -453,7 +449,7 @@ public final class ToolLoopOrchestrator {
     }
 
     /**
-     * 编排结果：分析文本 + 最后一轮 AI 原始响应 + 是否因 {@link #MAX_LOOPS} 强制收尾。
+     * 编排结果：分析文本 + 最后一轮 AI 原始响应 + 是否因 MAX_LOOPS 强制收尾。
      */
     public record Outcome(String analysis, String lastRaw, boolean forcedWrapUp) {
     }

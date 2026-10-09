@@ -16,22 +16,20 @@ import java.util.function.Consumer;
 
 /**
  * 被动分析编排器：在独立线程池里把"原始请求 / 响应字节"重建为 Montoya 的
- * {@link HttpRequest} / {@link HttpResponse}，再调用 {@link TrafficAnalyzer#analyzeAsync}，
+ * HttpRequest / HttpResponse，再调用 TrafficAnalyzer.analyzeAsync，
  * 并把结果（成功 / 失败）通过结果回调（通常是 {@code FindingStore.addFindings}）落库。
  *
- * <p>关键设计：</p>
- * <ul>
- *   <li><b>字节级重建</b>：Proxy 回调线程拿到的 {@code InterceptedRequest} 不能跨线程持有，
+ * 关键设计：
+ *   字节级重建：Proxy 回调线程拿到的 {@code InterceptedRequest} 不能跨线程持有，
  *       必须在进入被动分析线程前把它的 {@code toByteArray()} 拷贝出来；本类用
  *       {@code api.http().httpRequest(httpService, byteArray)} 重新构造 HttpRequest，
- *       等价于从 raw 报文重建——这与 Repeater / 上下文菜单送入分析页的路径完全一致；</li>
- *   <li><b>异常隔离</b>：整条分析链路任何位置抛异常都 try-catch 吞掉并写日志，
- *       绝不回传到 {@link PassiveAnalysisExecutor} 的线程——避免 AI 临时不可用时
- *       反复打印栈浪费用户视线；</li>
- *   <li><b>结果回调</b>：通过构造器注入 {@code AnalysisResultHandler}，携带原始
+ *       等价于从 raw 报文重建——这与 Repeater / 上下文菜单送入分析页的路径完全一致；
+ *   异常隔离：整条分析链路任何位置抛异常都 try-catch 吞掉并写日志，
+ *       绝不回传到 PassiveAnalysisExecutor 的线程——避免 AI 临时不可用时
+ *       反复打印栈浪费用户视线；
+ *   结果回调：通过构造器注入 {@code AnalysisResultHandler}，携带原始
  *       request/response 字节（被动分析现在也会把原文交给"历史"页签），默认实现
- *       仅落 FindingStore；测试可注入 mock 验证调用。</li>
- * </ul>
+ *       仅落 FindingStore；测试可注入 mock 验证调用。
  */
 public final class PassiveAnalyzer {
 
@@ -42,7 +40,7 @@ public final class PassiveAnalyzer {
     @FunctionalInterface
     public interface AnalysisResultHandler {
         /**
-         * @param result         来自 {@link TrafficAnalyzer} 的分析结果。
+         * @param result         来自 TrafficAnalyzer 的分析结果。
          * @param requestBytes   本次分析使用的原始请求字节（可为 null）。
          * @param responseBytes  本次分析使用的原始响应字节（可为 null / 无响应）。
          */
@@ -56,11 +54,11 @@ public final class PassiveAnalyzer {
     /**
      * 在飞的被动分析任务句柄。
      *
-     * <p>手动分析由 {@code MessageTab} 持有 {@code currentTask} 并在关闭/取消时中断；
-     * 被动分析此前把 {@code analyzeAsync} 的返回值直接丢弃，于是<b>没有任何取消路径</b>——
+     * 手动分析由 {@code MessageTab} 持有 {@code currentTask} 并在关闭/取消时中断；
+     * 被动分析此前把 {@code analyzeAsync} 的返回值直接丢弃，于是没有任何取消路径——
      * 插件卸载时 {@code PassiveAnalysisExecutor.shutdownNow()} 只是中断线程，而 AI 等待用的是
-     * {@code CompletableFuture.join()}（<b>不响应中断</b>），请求会一直跑到 JDK HTTP 超时
-     * （最长 300s）。这里登记句柄，卸载时逐个 {@code cancel()} 真正中断。</p>
+     * {@code CompletableFuture.join()}（不响应中断），请求会一直跑到 JDK HTTP 超时
+     * （最长 300s）。这里登记句柄，卸载时逐个 {@code cancel()} 真正中断。
      */
     private final Set<AnalysisTask> inFlight = ConcurrentHashMap.newKeySet();
 
@@ -81,7 +79,7 @@ public final class PassiveAnalyzer {
     /**
      * 在独立线程池里执行一次完整的"请求 + 响应 → AI 分析 → 落库"流程。
      *
-     * <p>本方法不抛异常：所有内部错误一律 try-catch + 日志。</p>
+     * 本方法不抛异常：所有内部错误一律 try-catch + 日志。
      *
      * @param httpService    请求归属的 HTTP 服务（从 InterceptedRequest.httpService() 拿）；
      *                       重建 HttpRequest 必须用同一个 service 才能正确还原 Host / TLS 标志。
@@ -97,7 +95,7 @@ public final class PassiveAnalyzer {
     }
 
     /**
-     * {@link #analyzeAsync(HttpService, String, String, byte[], byte[])} 的扩展版：
+     *  #analyzeAsync(HttpService, String, String, byte[], byte[]) 的扩展版：
      * 在全局 {@code resultHandler} 执行后再多触发一次 per-call 回调
      * {@code onResult}，给"需要看到本次结果才能决定后续动作"的调用方用
      * （典型场景：失败时让调用方回滚 dedup 指纹）。可空。
@@ -173,9 +171,9 @@ public final class PassiveAnalyzer {
     /**
      * 取消所有在飞的被动分析（插件卸载路径调用）。
      *
-     * <p>为什么必须显式取消：{@code PassiveAnalysisExecutor.shutdownNow()} 只能中断线程，
+     * 为什么必须显式取消：{@code PassiveAnalysisExecutor.shutdownNow()} 只能中断线程，
      * 而 AI 等待走的是不响应中断的 {@code CompletableFuture.join()}——不调本方法的话，
-     * 卸载后这些请求会继续占着连接直到 JDK HTTP 超时。</p>
+     * 卸载后这些请求会继续占着连接直到 JDK HTTP 超时。
      */
     public void cancelInFlight() {
         for (AnalysisTask task : inFlight) {
@@ -191,8 +189,8 @@ public final class PassiveAnalyzer {
     /**
      * 输出错误日志到 Burp Extender。
      *
-     * <p>{@code api} 为 null 时（测试场景）保留 {@link Throwable#printStackTrace()}
-     * 兜底——单测里没人看 stderr，但异常栈仍然能在测试输出里出现，便于定位失败原因。</p>
+     * {@code api} 为 null 时（测试场景）保留 Throwable.printStackTrace()
+     * 兜底——单测里没人看 stderr，但异常栈仍然能在测试输出里出现，便于定位失败原因。
      */
     private void logError(String message, Throwable t) {
         if (api != null) {

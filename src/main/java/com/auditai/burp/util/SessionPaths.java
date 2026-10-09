@@ -19,15 +19,13 @@ import java.util.regex.Pattern;
  * 定位当前 Burp 项目的会话目录：专业版 {@code <数据根>/projects/<id>/}，
  * 社区版 {@code <数据根>/temporary/}。
  *
- * <p>数据根解析优先级：</p>
- * <ol>
- *   <li>环境变量 {@value #AUDITAI_HOME_ENV_VAR}。末尾（大小写不敏感）等于 #DATA_DIRECTORY_NAME
+ * 数据根解析优先级：
+ *   环境变量 {@value #AUDITAI_HOME_ENV_VAR}。末尾（大小写不敏感）等于 #DATA_DIRECTORY_NAME
  *       时原样使用（如 {@code E:\AuditAI Data}），否则追加一层（如 {@code AUDITAI_HOME=E:\aa} → {@code E:\aa\AuditAI Data}）。
- *       设了但写不动不回退（视为用户显式意图）。</li>
- *   <li>Burp 安装目录的同级（便携安装下便于整包备份；系统级安装通常不可写，自动下一档）。</li>
- *   <li>OS 标准用户数据目录：Windows {@code %LOCALAPPDATA%\AuditAI Data}，
- *       Unix {@code $HOME/.local/share/AuditAI Data}。</li>
- * </ol>
+ *       设了但写不动不回退（视为用户显式意图）。
+ *   Burp 安装目录的同级（便携安装下便于整包备份；系统级安装通常不可写，自动下一档）。
+ *   OS 标准用户数据目录：Windows {@code %LOCALAPPDATA%\AuditAI Data}，
+ *       Unix {@code $HOME/.local/share/AuditAI Data}。
  */
 public final class SessionPaths {
 
@@ -56,20 +54,20 @@ public final class SessionPaths {
 
     /**
      * 数据根解析结果：路径 + 来源 + 兜底诊断。{@code diagnostic} 仅在
-     * {@link DataRootSource#OS_FALLBACK} 时非空，携带回退原因（未推断到 / 无父目录 /
+     * DataRootSource.OS_FALLBACK 时非空，携带回退原因（未推断到 / 无父目录 /
      * 同级不可写）与回退目标；其余来源为 null。
      */
     public record DataRootResolution(Path path, DataRootSource source, String diagnostic) {
     }
 
     /**
-     * 数据根来源：{@link #AUDITAI_HOME} > {@link #BURP_SIBLING} > {@link #OS_FALLBACK}。
-     * {@link #DIRECT} 仅出现在测试或调用方显式传入根目录的场景。
+     * 数据根来源：AUDITAI_HOME > BURP_SIBLING > OS_FALLBACK。
+     * DIRECT 仅出现在测试或调用方显式传入根目录的场景。
      */
     public enum DataRootSource {
         /** 调用方显式传入根目录（测试或内部代码使用）。 */
         DIRECT,
-        /** {@link #AUDITAI_HOME_ENV_VAR} 环境变量指定。 */
+        /** AUDITAI_HOME_ENV_VAR 环境变量指定。 */
         AUDITAI_HOME,
         /** 与 Burp 安装目录同级。 */
         BURP_SIBLING,
@@ -93,8 +91,8 @@ public final class SessionPaths {
      * （落到 {@code projects/<id>/}）；其余（社区版 / 企业版 / 专业版但 ID 为空）
      * → 返回 #TEMPORARY_PROJECT_ID（落到 {@code temporary/}）。
      *
-     * <p>专业版即使未带 {@code --project-file} 也会拿到稳定 ID，直接落到
-     * {@code projects/<id>/}，避免不同会话挤到同一个 {@code temporary/}。</p>
+     * 专业版即使未带 {@code --project-file} 也会拿到稳定 ID，直接落到
+     * {@code projects/<id>/}，避免不同会话挤到同一个 {@code temporary/}。
      */
     public static String resolveProjectId(MontoyaApi api) {
         if (isProfessionalEdition(api)) {
@@ -212,19 +210,17 @@ public final class SessionPaths {
     /**
      * 推断当前 JVM 进程对应的 Burp 安装根目录。
      *
-     * <p>Montoya 没有直接暴露 Burp 安装目录。本方法按以下顺序探测：</p>
-     * <ol>
-     *   <li>进程命令行起点本身就是 Burp 启动器（{@code BurpSuitePro.exe} 等）；</li>
-     *   <li>独立 JVM 场景下沿父目录回溯找 Burp 启动器 / JAR；</li>
-     *   <li>JVM 参数里 {@code -jar burpsuite_*.jar}（用户用自定义 JDK 的
-     *       {@code java -jar} 启动 Burp 时走这条——{@code arguments()} 是唯一线索）；</li>
-     *   <li>{@code java.class.path} 系统属性（native launcher 清空了 {@code arguments()}
-     *       时仍保留主类 jar 路径）；</li>
-     *   <li>扩展 JAR 路径向上回溯 / 扫 {@code BurpSuite*} 同级目录（扩展和 Burp
-     *       不在同一棵目录树时兜底）。</li>
-     * </ol>
+     * Montoya 没有直接暴露 Burp 安装目录。本方法按以下顺序探测：
+     *   进程命令行起点本身就是 Burp 启动器（{@code BurpSuitePro.exe} 等）；
+     *   独立 JVM 场景下沿父目录回溯找 Burp 启动器 / JAR；
+     *   JVM 参数里 {@code -jar burpsuite_*.jar}（用户用自定义 JDK 的
+     *       {@code java -jar} 启动 Burp 时走这条——{@code arguments()} 是唯一线索）；
+     *   {@code java.class.path} 系统属性（native launcher 清空了 {@code arguments()}
+     *       时仍保留主类 jar 路径）；
+     *   扩展 JAR 路径向上回溯 / 扫 {@code BurpSuite*} 同级目录（扩展和 Burp
+     *       不在同一棵目录树时兜底）。
      *
-     * <p>识别名单见 #BURP_ARTIFACT_NAMES。</p>
+     * 识别名单见 #BURP_ARTIFACT_NAMES。
      *
      * @param extensionFilename Burp 报告的扩展 JAR 路径；null / 空时跳过第 5 档。
      * @return Burp 安装目录的绝对路径；推断不到时返回 null。

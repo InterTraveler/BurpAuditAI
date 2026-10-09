@@ -13,30 +13,26 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 配置持久化仓库：把 {@link Settings} 读写到 Burp 的持久化存储中。
+ * 配置持久化仓库：把 Settings 读写到 Burp 的持久化存储中。
  *
- * <p>Burp 的 {@link Preferences} 是一个 KV 存储，数据随 Burp 用户配置目录保存，
- * 卸载重装插件后依然保留——这正是"配置不随插件重载而丢失"的标准做法。</p>
+ * Burp 的 Preferences 是一个 KV 存储，数据随 Burp 用户配置目录保存，
+ * 卸载重装插件后依然保留——这正是"配置不随插件重载而丢失"的标准做法。
  *
- * <p>2026.7 的 Preferences 接口约定：</p>
- * <ul>
- *   <li>读取方法返回<b>装箱类型</b>（{@code Boolean}/{@code String}/{@code Integer}…），
- *       键不存在时返回 {@code null}——因此读取时要用默认值回退；</li>
- *   <li>键名统一加 {@code com.auditai.} 前缀（反向域名风格，避免与其他扩展的键冲突），
+ * 2026.7 的 Preferences 接口约定：
+ *   读取方法返回装箱类型（{@code Boolean}/{@code String}/{@code Integer}…），
+ *       键不存在时返回 {@code null}——因此读取时要用默认值回退；
+ *   键名统一加 {@code com.auditai.} 前缀（反向域名风格，避免与其他扩展的键冲突），
  *       注：此 key 前缀刻意不与 Java 包路径（{@code com.auditai.burp.*}）绑定，
- *       以保留未来调整包结构时的数据兼容性。</li>
- * </ul>
+ *       以保留未来调整包结构时的数据兼容性。
  *
- * <p>当前存储布局（多 AI 服务配置 + 当前激活项 + 全局提示词）：</p>
- * <ul>
- *   <li>{@code aiServices}：JSON 数组，元素为完整 {@link AiConfig} 字段；</li>
- *   <li>{@code activeAiService}：当前激活项的 {@code name}；</li>
- *   <li>{@code customPrompt}：全局自定义系统提示词。</li>
- * </ul>
+ * 当前存储布局（多 AI 服务配置 + 当前激活项 + 全局提示词）：
+ *   {@code aiServices}：JSON 数组，元素为完整 AiConfig 字段；
+ *   {@code activeAiService}：当前激活项的 {@code name}；
+ *   {@code customPrompt}：全局自定义系统提示词。
  *
- * <p>兼容 v0.2 的单配置存储：若 {@code aiServices} 键不存在但存在
+ * 兼容 v0.2 的单配置存储：若 {@code aiServices} 键不存在但存在
  * {@code baseUrl}/{@code model} 等旧键，则按旧键构造一条配置迁入新结构，
- * 避免升级后老用户的设置被丢失。</p>
+ * 避免升级后老用户的设置被丢失。
  */
 public final class SettingsStore {
 
@@ -79,7 +75,7 @@ public final class SettingsStore {
      * 读取完整设置：先尝试新格式（多配置 + 激活项），失败/缺失时按 v0.2 旧格式迁移，
      * 旧格式也没有时回退到出厂默认（当前为"空配置集"，由用户在设置页添加 AI 服务）。
      *
-     * @return 合并了持久化值与默认值的完整 {@link Settings}。
+     * @return 合并了持久化值与默认值的完整 Settings。
      */
     public Settings load() {
         String customPrompt = readString(KEY_CUSTOM_PROMPT, "");
@@ -113,9 +109,9 @@ public final class SettingsStore {
      * 保存完整设置：把所有 AI 服务配置序列化为 JSON 写入一个键，把激活项名称和
      * 提示词写入独立键。
      *
-     * <p>设计权衡：把整个列表写成一个 JSON 比"每条配置一组键"更紧凑、易于手工编辑，
+     * 设计权衡：把整个列表写成一个 JSON 比"每条配置一组键"更紧凑、易于手工编辑，
      * 键更少也让"读到一半"的窗口更小（Burp Preferences 的每次写入本身不是原子的，
-     * 真正的兜底是 {@link #load()} 的多级回退与单条容错）。</p>
+     * 真正的兜底是 load() 的多级回退与单条容错）。
      *
      * @param settings 要持久化的配置集。
      */
@@ -264,11 +260,11 @@ public final class SettingsStore {
     }
 
     /**
-     * 从 v0.2 的单配置键迁移出 {@link AiConfig}；旧键全空时返回 null。
+     * 从 v0.2 的单配置键迁移出 AiConfig；旧键全空时返回 null。
      *
-     * <p>迁移出来的配置用通用名"默认配置"——名称与 baseUrl 完全独立，
+     * 迁移出来的配置用通用名"默认配置"——名称与 baseUrl 完全独立，
      * 不去做"看 URL 猜厂商"这种推断；用户看到列表里这条后可以立刻在
-     * 设置界面改名 / 删除 / 改 baseUrl。</p>
+     * 设置界面改名 / 删除 / 改 baseUrl。
      */
     private AiConfig tryMigrateLegacy() {
         String baseUrl = preferences.getString(LEGACY_KEY_BASE_URL);

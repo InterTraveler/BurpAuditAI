@@ -29,8 +29,8 @@ import java.util.concurrent.TimeUnit;
  * 基于 OpenAI Chat Completions 协议（{@code POST {baseUrl}/chat/completions}）的
  * AiClient 实现。
  *
- * <p>出站走 JDK {@code HttpClient}，不经过 Burp 任何中间件——AI 流量的
- * prompt / API Key / 响应均不出现在 Logger / Proxy history / 拦截器。</p>
+ * 出站走 JDK {@code HttpClient}，不经过 Burp 任何中间件——AI 流量的
+ * prompt / API Key / 响应均不出现在 Logger / Proxy history / 拦截器。
  */
 public final class OpenAiCompatibleClient implements AiClient {
 
@@ -111,10 +111,10 @@ public final class OpenAiCompatibleClient implements AiClient {
      * 带"远端不支持 json_object"自动降级的 JSON 调用：先按 {@code requireJson=true} 发，
      * 若遇到 4xx 且错误体提示不支持 {@code response_format}，自动重试一次（去掉该字段）。
      *
-     * <p>调用方拿到的是最终成功的句柄；如果两次都失败则抛出最后一次的异常。</p>
+     * 调用方拿到的是最终成功的句柄；如果两次都失败则抛出最后一次的异常。
      *
-     * <p>首请求 + 降级重试拼成同一条 {@code CompletableFuture} 链，
-     * cancel 一次贯通两次出站。</p>
+     * 首请求 + 降级重试拼成同一条 {@code CompletableFuture} 链，
+     * cancel 一次贯通两次出站。
      */
     public CancellableAiCall completeJsonAsyncWithFallback(List<ChatMessage> messages) throws AiException {
         AiConfig config = requireConfig();
@@ -328,8 +328,8 @@ public final class OpenAiCompatibleClient implements AiClient {
      * 构造 chat/completions 请求：JDK {@code HttpRequest.Builder} 链式设
      * URI / 超时 / 头 / body。
      *
-     * <p>包级可见：同包单测直接断言"端点拼接 / 超时夹取 / Key 换行校验"这三条
-     * 不依赖网络的纯逻辑。</p>
+     * 包级可见：同包单测直接断言"端点拼接 / 超时夹取 / Key 换行校验"这三条
+     * 不依赖网络的纯逻辑。
      */
     HttpRequest buildChatRequest(AiConfig config, JsonObject payload) {
         String endpoint = buildEndpoint(config.getBaseUrl());

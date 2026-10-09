@@ -13,14 +13,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * {@link PromptBuilder} 系统提示词取值与技能片段拼装单元测试。
  *
- * <p>验证：</p>
- * <ul>
- *   <li>"自定义 → 默认（资源文件 / 内置）"的优先级与回退；</li>
- *   <li>输出格式后缀（强制 JSON）始终追加，不被用户内容覆盖；</li>
- *   <li>{@code buildSystemPromptWithSkills} 按入参顺序拼接技能 prompt 片段，缺省跳过空 prompt；</li>
- *   <li><b>语言一致性</b>：EN 模式下基础提示词、输出格式后缀与技能目录/片段指令
- *       应全部为英文，输出指令保持语言一致。</li>
- * </ul>
+ * 验证：
+ *   "自定义 → 默认（资源文件 / 内置）"的优先级与回退；
+ *   输出格式后缀（强制 JSON）始终追加，不被用户内容覆盖；
+ *   {@code buildSystemPromptWithSkills} 按入参顺序拼接技能 prompt 片段，缺省跳过空 prompt；
+ *   语言一致性：EN 模式下基础提示词、输出格式后缀与技能目录/片段指令
+ *       应全部为英文，输出指令保持语言一致。
  */
 class PromptBuilderTest {
 

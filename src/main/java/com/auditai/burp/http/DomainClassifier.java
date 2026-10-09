@@ -7,8 +7,8 @@ import java.util.Locale;
  * 示例：{@code a.b.example.com → example.com}，{@code api.example.com → example.com}，
  * IPv4 字面量（{@code 127.0.0.1}）原样返回。
  *
- * <p>MVP 限制：没引入公共后缀列表（PSL），{@code foo.com.cn} 会被归到 {@code com.cn}。
- * 绝大多数 .com / .org / .io 场景正确；要严格判定再单独加 PSL。</p>
+ * MVP 限制：没引入公共后缀列表（PSL），{@code foo.com.cn} 会被归到 {@code com.cn}。
+ * 绝大多数 .com / .org / .io 场景正确；要严格判定再单独加 PSL。
  */
 public final class DomainClassifier {
 

@@ -9,21 +9,19 @@ import java.awt.event.ComponentEvent;
 import java.io.Serial;
 
 /**
- * 技能卡片容器：使用 {@link WrapLayout} 自动换行排版技能卡片，
- * 自身实现 {@link Scrollable} 以与 {@link javax.swing.JScrollPane} 良好配合。
+ * 技能卡片容器：使用 WrapLayout 自动换行排版技能卡片，
+ * 自身实现 Scrollable 以与 javax.swing.JScrollPane 良好配合。
  *
- * <p>滚动行为：</p>
- * <ul>
- *   <li>水平方向：<b>跟随视口宽度</b>，让 {@link WrapLayout} 用真实宽度算出每行能放几个卡片；
- *       同时禁用水平滚动条——一行放不下就换行；</li>
- *   <li>垂直方向：<b>由内容自然撑高</b>（不跟随视口），多行总高度超出视口时由
- *       JScrollPane 自动出垂直滚动条；</li>
- *   <li>滚轮步进：单步 = 32 像素，整屏 = 视口高度。</li>
- * </ul>
+ * 滚动行为：
+ *   水平方向：跟随视口宽度，让 WrapLayout 用真实宽度算出每行能放几个卡片；
+ *       同时禁用水平滚动条——一行放不下就换行；
+ *   垂直方向：由内容自然撑高（不跟随视口），多行总高度超出视口时由
+ *       JScrollPane 自动出垂直滚动条；
+ *   滚轮步进：单步 = 32 像素，整屏 = 视口高度。
  *
- * <p>Burp Suite Tab 的实际尺寸要等用户切到该页签后才被正确设置，因此
- * 通过 {@link WrapLayout#install(JPanel)} 挂一个层级监听，
- * 首次显示时强制 revalidate，让换行计算拿到真实的容器宽度。</p>
+ * Burp Suite Tab 的实际尺寸要等用户切到该页签后才被正确设置，因此
+ * 通过 WrapLayout.install(JPanel) 挂一个层级监听，
+ * 首次显示时强制 revalidate，让换行计算拿到真实的容器宽度。
  */
 public final class SkillGridPanel extends JPanel implements Scrollable {
 

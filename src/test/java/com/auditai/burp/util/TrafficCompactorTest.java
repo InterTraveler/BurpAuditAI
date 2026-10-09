@@ -13,17 +13,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * {@link TrafficCompactor} 单元测试。
  *
- * <p>所有用例在断言前都用 {@link System#out} 打印"输入 / 输出 / 长度"，方便在
+ * 所有用例在断言前都用 {@link System#out} 打印"输入 / 输出 / 长度"，方便在
  * mvn test 输出中直观看到压缩效果。所有 {@code assertTrue} 都带 "actual=..." 消息，
- * 失败时能直接看到真实输出。</p>
+ * 失败时能直接看到真实输出。
  *
- * <p>测试策略：</p>
- * <ul>
- *   <li><b>底层方法</b>（{@code formatHeaderLine / compactBody / looksLikeJson} 等）
- *       —— 不依赖 Montoya，直接调 package-private 静态方法；</li>
- *   <li><b>原始字节入口</b>（{@code compactRawRequest/Response/Pair}）—— 面向"调用方只持
- *       raw bytes、没有 Montoya 句柄"的场景，直接喂原始 HTTP 字节断言压缩行为。</li>
- * </ul>
+ * 测试策略：
+ *   底层方法（{@code formatHeaderLine / compactBody / looksLikeJson} 等）
+ *       —— 不依赖 Montoya，直接调 package-private 静态方法；
+ *   原始字节入口（{@code compactRawRequest/Response/Pair}）—— 面向"调用方只持
+ *       raw bytes、没有 Montoya 句柄"的场景，直接喂原始 HTTP 字节断言压缩行为。
  */
 class TrafficCompactorTest {
 
@@ -298,9 +296,9 @@ class TrafficCompactorTest {
     /**
      * 头部以 LF 结束、body 里含 CRLFCRLF 时，必须按"第一个空行"切分。
      *
-     * <p>回归用例：历史实现先全局搜 {@code \r\n\r\n}、找不到才兜底 {@code \n\n}，
+     * 回归用例：历史实现先全局搜 {@code \r\n\r\n}、找不到才兜底 {@code \n\n}，
      * 于是这种报文会命中 body 内部的 {@code \r\n\r\n}——headerBlock 混进 body 前缀、
-     * body 起点错位（压缩结果里会出现莫名字节）。</p>
+     * body 起点错位（压缩结果里会出现莫名字节）。
      */
     @Test
     void compactRawRequest_lfHeadersWithCrlfCrlfInBody_splitsAtFirstBlankLine() {

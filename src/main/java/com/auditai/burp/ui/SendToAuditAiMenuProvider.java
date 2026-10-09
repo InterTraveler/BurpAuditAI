@@ -17,23 +17,21 @@ import java.util.Optional;
 
 /**
  * 上下文菜单提供器：让用户在其他模块（Proxy 历史、Repeater、Intruder 等）
- * 右键选中的报文一键发送到本插件分析页，菜单项名称为 <b>"Send to AuditAI"</b>，
+ * 右键选中的报文一键发送到本插件分析页，菜单项名称为 "Send to AuditAI"，
  * 与 Burp 内置的 "Send to Repeater / Send to Intruder" 命名风格一致。
  *
- * <p>实现说明：</p>
- * <ul>
- *   <li><b>菜单位置</b>：Burp 会把扩展提供的菜单项自动附加在内置菜单
+ * 实现说明：
+ *   菜单位置：Burp 会把扩展提供的菜单项自动附加在内置菜单
  *       （Send to Repeater 等）下方（分隔线之下），因此无需额外 API 控制位置；
- *       本插件只提供一个菜单项，保持与内置项一致的视觉分组；</li>
- *   <li><b>响应回补</b>：Montoya 的 {@link ContextMenuEvent#selectedRequestResponses()}
- *       在 Repeater、Intruder、原始 Request 编辑器等场景下返回的 {@link HttpRequestResponse}
+ *       本插件只提供一个菜单项，保持与内置项一致的视觉分组；
+ *   响应回补：Montoya 的 ContextMenuEvent.selectedRequestResponses()
+ *       在 Repeater、Intruder、原始 Request 编辑器等场景下返回的 HttpRequestResponse
  *       可能只含请求不含响应（响应在另一 Tab / 另一字段）。这种情况下会尝试从
  *       {@code api.proxy().history()} 反查匹配项（URL + Method 匹配），补回响应。
- *       Proxy 历史表本身右键时已含完整 pair，无需反查；</li>
- *   <li>点击后把选中的报文交给 {@link MainTab#acceptMessage(HttpRequestResponse)}，
- *       由分析页负责填入编辑器并切换页签；</li>
- *   <li>接口的其他两个默认方法（WebSocket / 审计问题上下文）保持默认空实现。</li>
- * </ul>
+ *       Proxy 历史表本身右键时已含完整 pair，无需反查；
+ *   点击后把选中的报文交给 MainTab.acceptMessage(HttpRequestResponse)，
+ *       由分析页负责填入编辑器并切换页签；
+ *   接口的其他两个默认方法（WebSocket / 审计问题上下文）保持默认空实现。
  */
 public final class SendToAuditAiMenuProvider implements ContextMenuItemsProvider {
 
@@ -83,16 +81,14 @@ public final class SendToAuditAiMenuProvider implements ContextMenuItemsProvider
     /**
      * 从当前右键事件中解析要发送的报文，并补全缺失的响应。
      *
-     * <p>取值优先级：</p>
-     * <ol>
-     *   <li>从 {@link ContextMenuEvent#selectedRequestResponses()} 取第一条；</li>
-     *   <li>若列表为空（编辑器内部右键等场景），回退到
-     *       {@link ContextMenuEvent#messageEditorRequestResponse()}；</li>
-     *   <li>若结果中的 {@code response} 为空（Repeater Request tab 等场景），
+     * 取值优先级：
+     *   从 ContextMenuEvent.selectedRequestResponses() 取第一条；
+     *   若列表为空（编辑器内部右键等场景），回退到
+     *       ContextMenuEvent.messageEditorRequestResponse()；
+     *   若结果中的 {@code response} 为空（Repeater Request tab 等场景），
      *       从 {@code api.proxy().history()} 按 URL + Method 匹配反查，
-     *       找到包含完整响应的副本替换；</li>
-     *   <li>仍然没有响应：原样返回（不阻断；用户可能只粘贴了请求）。</li>
-     * </ol>
+     *       找到包含完整响应的副本替换；
+     *   仍然没有响应：原样返回（不阻断；用户可能只粘贴了请求）。
      *
      * @param event 上下文菜单事件。
      * @return 要发送的报文（含响应或不含）；当前上下文没有报文时返回 null。
@@ -131,8 +127,8 @@ public final class SendToAuditAiMenuProvider implements ContextMenuItemsProvider
     /**
      * 判断响应是否缺失。
      *
-     * <p>Montoya 2026.7 的 {@code response()} 可能为 null（无响应），
-     * 也可能是一个"空对象"（toByteArray 长度为 0，如编辑器刚初始化的占位响应）。两种情况都视为缺失。</p>
+     * Montoya 2026.7 的 {@code response()} 可能为 null（无响应），
+     * 也可能是一个"空对象"（toByteArray 长度为 0，如编辑器刚初始化的占位响应）。两种情况都视为缺失。
      */
     private static boolean isResponseMissing(HttpRequestResponse message) {
         try {
