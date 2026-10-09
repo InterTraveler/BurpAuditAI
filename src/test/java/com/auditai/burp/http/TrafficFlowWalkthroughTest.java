@@ -37,18 +37,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * 技能驱动两阶段分析的端到端走查（不联网，全程用 {@link FakeAiClient} 脚本响应）。
  *
- * <p>用例覆盖：</p>
- * <ul>
- *   <li>{@link #walkthroughNoSkillsEnabled}：无技能 → 1 次单轮调用；</li>
- *   <li>{@link #walkthroughModelPicksAndProceedsToPhase2}：阶段 1 模型选了 2 个技能 → 阶段 2
- *       用这 2 个技能的 prompt / userContext 完成最终分析，共 2 次调用；</li>
- *   <li>{@link #walkthroughModelSkipsPhase2}：阶段 1 模型选择 0 个技能 + 直接给 analysis →
- *       跳过阶段 2，只 1 次调用；</li>
- *   <li>{@link #walkthroughPhase1JsonInvalidFallsBackToAllSkills}：阶段 1 返回非 JSON →
- *       全量启用兜底，阶段 2 仍执行；</li>
- *   <li>{@link #walkthroughPhase2FailsFallsBackToPhase1Analysis}：阶段 2 失败但阶段 1
- *       有 analysis → 用阶段 1 兜底。</li>
- * </ul>
+ * 用例覆盖：
+ *   {@link #walkthroughNoSkillsEnabled}：无技能 → 1 次单轮调用；
+ *   {@link #walkthroughModelPicksAndProceedsToPhase2}：阶段 1 模型选了 2 个技能 → 阶段 2
+ *       用这 2 个技能的 prompt / userContext 完成最终分析，共 2 次调用；
+ *   {@link #walkthroughModelSkipsPhase2}：阶段 1 模型选择 0 个技能 + 直接给 analysis →
+ *       跳过阶段 2，只 1 次调用；
+ *   {@link #walkthroughPhase1JsonInvalidFallsBackToAllSkills}：阶段 1 返回非 JSON →
+ *       全量启用兜底，阶段 2 仍执行；
+ *   {@link #walkthroughPhase2FailsFallsBackToPhase1Analysis}：阶段 2 失败但阶段 1
+ *       有 analysis → 用阶段 1 兜底。
  */
 class TrafficFlowWalkthroughTest {
 
@@ -227,8 +225,8 @@ class TrafficFlowWalkthroughTest {
      * 阶段 1 模型判断"无明显风险"时直接给最终结论（含 risk + findings 完整声明） →
      * 跳过阶段 2，且最终 AnalysisResult 正确反映 risk/findings。
      *
-     * <p>这条路径验证：当模型在阶段 1 就把最终结论写完（不必再调阶段 2），插件仍能把
-     * 结构化 finding 提取出来（而不是只取 analysis 文本、丢 findings）。</p>
+     * 这条路径验证：当模型在阶段 1 就把最终结论写完（不必再调阶段 2），插件仍能把
+     * 结构化 finding 提取出来（而不是只取 analysis 文本、丢 findings）。
      */
     @Test
     void walkthroughModelGivesFinalConclusionInPhase1() throws Exception {
@@ -282,8 +280,8 @@ class TrafficFlowWalkthroughTest {
     /**
      * 阶段 1 返回非 JSON → fail-fast 跳过阶段 2。
      *
-     * <p>阶段 1 解析失败时直接 fail-fast：打 ERROR 日志 + 占位 analysis 收尾，
-     * 不进入 phase 2。模型调用次数应等于阶段 1。</p>
+     * 阶段 1 解析失败时直接 fail-fast：打 ERROR 日志 + 占位 analysis 收尾，
+     * 不进入 phase 2。模型调用次数应等于阶段 1。
      */
     @Test
     void walkthroughPhase1JsonInvalidFailsFastSkipsPhase2() throws Exception {
@@ -335,9 +333,9 @@ class TrafficFlowWalkthroughTest {
      * 模型在阶段 1 选 "多报文协同" 技能：阶段 2 的 user 段应包含从 store 拉取的同域历史摘要，
      * 且 {related} / {summaryCount} 占位符都已被实际数据替换。
      *
-     * <p>这是"技能 = 行为注入"的端到端验证：用户启用一个技能 → 阶段 2 把技能的
+     * 这是"技能 = 行为注入"的端到端验证：用户启用一个技能 → 阶段 2 把技能的
      * userContext 模板渲染好塞进 user 段 → 模型拿到的就是带历史摘要的提示词。
-     * 同时验证阶段 1 的 user 段<b>不</b>预填摘要（业内做法"两层信息架构"的核心契约）。</p>
+     * 同时验证阶段 1 的 user 段不预填摘要（业内做法"两层信息架构"的核心契约）。
      */
     @Test
     void walkthroughModelPicksMultiMessageCorrelationSkill() throws Exception {
@@ -603,9 +601,9 @@ class TrafficFlowWalkthroughTest {
     /**
      * 阶段 2 模型返回空内容 → 结果保留为空，流程不抛错。
      *
-     * <p>"重放"在 phase 2 是常驻能力，由 {@link com.auditai.burp.tools.ToolLoopOrchestrator} 驱动：
+     * "重放"在 phase 2 是常驻能力，由 {@link com.auditai.burp.tools.ToolLoopOrchestrator} 驱动：
      * 阶段 1 的 analysis 不会自动使用，只有模型在 phase 2 主动重放或直接给结论才会结束循环。
-     * 空响应被解析为"没给结论"，结果保留为空。</p>
+     * 空响应被解析为"没给结论"，结果保留为空。
      */
     @Test
     void walkthroughPhase2EmptyResponseYieldsEmptyResult() throws Exception {
@@ -653,18 +651,16 @@ class TrafficFlowWalkthroughTest {
     }
 
     /**
-     * <b>回归：仅自动激活 → 短路 A 跳过 phase 1。</b>
+     * 回归：仅自动激活 → 短路 A 跳过 phase 1。
      *
-     * <p>用户<b>只</b>勾选了"自动激活"技能，没有普通启用任何技能。
-     * phase1Candidates 为空、pinned 非空 → <b>短路 A</b> 直接进入 phase 2 把 pinned 注入，
-     * 跳过 phase 1 节省一次调用。</p>
+     * 用户只勾选了"自动激活"技能，没有普通启用任何技能。
+     * phase1Candidates 为空、pinned 非空 → 短路 A 直接进入 phase 2 把 pinned 注入，
+     * 跳过 phase 1 节省一次调用。
      *
-     * <p>关键不变量：</p>
-     * <ul>
-     *   <li>callCount = 1（短路 A 跳过了 phase 1）；</li>
-     *   <li>phase 2 system 必须包含 pinned 技能的 prompt；</li>
-     *   <li>phase 2 system 也不应出现『可选技能』目录（phase 1 跳过，phase 2 拼的是 replay system）。</li>
-     * </ul>
+     * 关键不变量：
+     *   callCount = 1（短路 A 跳过了 phase 1）；
+     *   phase 2 system 必须包含 pinned 技能的 prompt；
+     *   phase 2 system 也不应出现『可选技能』目录（phase 1 跳过，phase 2 拼的是 replay system）。
      */
     @Test
     void walkthroughPinnedOnlySkipsPhase1() throws Exception {
@@ -713,21 +709,19 @@ class TrafficFlowWalkthroughTest {
     }
 
     /**
-     * <b>回归：短路 B 路径下 pinned 必选仍然生效 + phase 2 user 不含草稿。</b>
+     * 回归：短路 B 路径下 pinned 必选仍然生效 + phase 2 user 不含草稿。
      *
-     * <p>用户既普通启用了一些技能，又把另一些设为"自动激活（必选）"。模型在 phase 1
+     * 用户既普通启用了一些技能，又把另一些设为"自动激活（必选）"。模型在 phase 1
      * 选了 0 个 skill + 给 analysis——即便模型没遵守"必选"规则把 pinned id 写到
-     * {@code active_skill_ids}，pinned 仍然要被强制注入到 phase 2 system 段。</p>
+     * {@code active_skill_ids}，pinned 仍然要被强制注入到 phase 2 system 段。
      *
-     * <p>期望行为：</p>
-     * <ul>
-     *   <li>phase 1 system【可选技能】目录<b>同时列出</b>普通启用（sql-injection）和 pinned
-     *       （xss-detector），pinned 标"必选"；</li>
-     *   <li>phase 1 system 包含说明：必选技能"phase 2 一定会注入，无需写到 active_skill_ids"；</li>
-     *   <li>phase 1 system <b>不</b>直接拼 pinned 的 prompt 内容；</li>
-     *   <li>phase 2 system 含 pinned 的 prompt；</li>
-     *   <li>phase 2 user 段<b>不</b>拼 phase 1 的 analysis（无草稿逻辑）——避免误导模型。</li>
-     * </ul>
+     * 期望行为：
+     *   phase 1 system【可选技能】目录同时列出普通启用（sql-injection）和 pinned
+     *       （xss-detector），pinned 标"必选"；
+     *   phase 1 system 包含说明：必选技能"phase 2 一定会注入，无需写到 active_skill_ids"；
+     *   phase 1 system 不直接拼 pinned 的 prompt 内容；
+     *   phase 2 system 含 pinned 的 prompt；
+     *   phase 2 user 段不拼 phase 1 的 analysis（无草稿逻辑）——避免误导模型。
      */
     @Test
     void walkthroughMixedPinnedPhase2ForcedNoDraft() throws Exception {
@@ -1052,14 +1046,14 @@ class TrafficFlowWalkthroughTest {
      * 把"已经分析过的历史"塞进 AnalysisHistoryStore：构造一个成功的 AnalysisResult
      * 调 historyStore.add；statusCode=-1 时表示无响应（respBytes 忽略）。
      *
-     * <p>原 ProxyTrafficStore.captureRequest/Response 是"未分析"的代理流量，
+     * 原 ProxyTrafficStore.captureRequest/Response 是"未分析"的代理流量，
      * 现在 AnalysisHistoryStore 只接受"已分析"快照——所以这里直接走 add 路径，
-     * 模拟"历史上分析过这条报文"的状态。</p>
+     * 模拟"历史上分析过这条报文"的状态。
      */
     private static void seedHistory(AnalysisHistoryStore store, String method, String url,
                                     int statusCode, byte[] reqBytes, byte[] respBytes,
                                     long timestamp) {
-        AnalysisResult result = AnalysisResult.success(
+        AnalysisResult result = AnalysisResult.success("aid", 
                 timestamp, method, url, statusCode, "seeded", 0L, java.util.Collections.emptyList());
         try {
             store.add(result, AnalysisTrigger.MANUAL, reqBytes, respBytes, null);

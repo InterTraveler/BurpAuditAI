@@ -19,9 +19,9 @@ class FindingStoreTest {
     @Test
     void addFindingsDedupesByFindingId(@TempDir Path tempDir) throws Exception {
         try (FindingStore store = new FindingStore(tempDir, 100)) {
-            AnalysisResult r1 = AnalysisResult.success(1000L, "GET", "http://a", 200,
+            AnalysisResult r1 = AnalysisResult.success("aid", 1000L, "GET", "http://a", 200,
                     "summary", 10L,
-                    List.of(Finding.create("XSS", 80, "high", "desc",
+                    List.of(Finding.create("aid", "XSS", 80, "high", "desc",
                             "GET", "http://a", 1000L, 1000L)));
             store.addFindings(r1);
             assertEquals(1, store.list().size());
@@ -37,12 +37,12 @@ class FindingStoreTest {
         // 同 capturedAtMillis 时退化为插入顺序（List.sort stable）。
         try (FindingStore store = new FindingStore(tempDir, 100)) {
             // 故意以"乱序"加入：先 B(200) → A(100) → C(300)
-            store.addFindings(AnalysisResult.success(200L, "GET", "http://2", 200, "s", 0L,
-                    List.of(Finding.create("B", 50, "high", "d2", "GET", "http://2", 200L, 200L))));
-            store.addFindings(AnalysisResult.success(100L, "GET", "http://1", 200, "s", 0L,
-                    List.of(Finding.create("A", 50, "low", "d1", "GET", "http://1", 100L, 100L))));
-            store.addFindings(AnalysisResult.success(300L, "GET", "http://3", 200, "s", 0L,
-                    List.of(Finding.create("C", 50, "high", "d3", "GET", "http://3", 300L, 300L))));
+            store.addFindings(AnalysisResult.success("aid", 200L, "GET", "http://2", 200, "s", 0L,
+                    List.of(Finding.create("aid", "B", 50, "high", "d2", "GET", "http://2", 200L, 200L))));
+            store.addFindings(AnalysisResult.success("aid", 100L, "GET", "http://1", 200, "s", 0L,
+                    List.of(Finding.create("aid", "A", 50, "low", "d1", "GET", "http://1", 100L, 100L))));
+            store.addFindings(AnalysisResult.success("aid", 300L, "GET", "http://3", 200, "s", 0L,
+                    List.of(Finding.create("aid", "C", 50, "high", "d3", "GET", "http://3", 300L, 300L))));
             List<Finding> sorted = store.list();
             // 安装时间升序：A(100) → B(200) → C(300)，与 confidence / severity 完全无关
             assertEquals("A", sorted.get(0).getType());
@@ -57,11 +57,11 @@ class FindingStoreTest {
         // 退化为 LinkedHashMap 插入顺序（稳定排序保证）。
         try (FindingStore store = new FindingStore(tempDir, 100)) {
             // 同时间戳 = 500，三条 finding 在同一次 addFindings 里按数组顺序入库
-            store.addFindings(AnalysisResult.success(500L, "GET", "http://x", 200, "s", 0L,
+            store.addFindings(AnalysisResult.success("aid", 500L, "GET", "http://x", 200, "s", 0L,
                     List.of(
-                            Finding.create("First", 30, "critical", "d", "GET", "http://x", 500L, 500L),
-                            Finding.create("Second", 90, "low", "d", "GET", "http://x", 500L, 500L),
-                            Finding.create("Third", 50, "high", "d", "GET", "http://x", 500L, 500L)
+                            Finding.create("aid", "First", 30, "critical", "d", "GET", "http://x", 500L, 500L),
+                            Finding.create("aid", "Second", 90, "low", "d", "GET", "http://x", 500L, 500L),
+                            Finding.create("aid", "Third", 50, "high", "d", "GET", "http://x", 500L, 500L)
                     )));
             List<Finding> sorted = store.list();
             // 时间相同时顺序完全由入库顺序决定：First → Second → Third
@@ -77,11 +77,11 @@ class FindingStoreTest {
             AtomicInteger count = new AtomicInteger();
             store.addListener(ignored -> count.incrementAndGet());
             // 没有 finding 的 result 不应触发（hasContext 但无 findings）
-            store.addFindings(AnalysisResult.success(1L, "GET", "http://a", 200, "s", 0L));
+            store.addFindings(AnalysisResult.success("aid", 1L, "GET", "http://a", 200, "s", 0L));
             assertEquals(0, count.get());
             // 有 finding 触发
-            store.addFindings(AnalysisResult.success(2L, "GET", "http://b", 200, "s", 0L,
-                    List.of(Finding.create("X", 50, "info", "d", "GET", "http://b", 2L, 2L))));
+            store.addFindings(AnalysisResult.success("aid", 2L, "GET", "http://b", 200, "s", 0L,
+                    List.of(Finding.create("aid", "X", 50, "info", "d", "GET", "http://b", 2L, 2L))));
             assertEquals(1, count.get());
             // clear 触发
             store.clear();
@@ -92,9 +92,10 @@ class FindingStoreTest {
     @Test
     void contextForReturnsStoredReport(@TempDir Path tempDir) throws Exception {
         try (FindingStore store = new FindingStore(tempDir, 100)) {
-            Finding f = Finding.create("XSS", 80, "high", "desc",
+            String aid = "aid-1";
+            Finding f = Finding.create(aid, "XSS", 80, "high", "desc",
                     "GET", "http://a", 1000L, 999L);
-            store.addFindings(AnalysisResult.success(999L, "GET", "http://a", 200,
+            store.addFindings(AnalysisResult.success(aid, 999L, "GET", "http://a", 200,
                     "完整报告内容", 50L, List.of(f)));
             FindingStore.AnalysisContext ctx = store.contextFor(f);
             assertEquals(999L, ctx.getTimestampMillis());
@@ -108,13 +109,15 @@ class FindingStoreTest {
     @Test
     void persistAndReload(@TempDir Path tempDir) throws Exception {
         try (FindingStore store = new FindingStore(tempDir, 100)) {
-            store.addFindings(AnalysisResult.success(1000L, "GET", "http://a", 200,
+            String aid1 = "aid-A";
+            store.addFindings(AnalysisResult.success(aid1, 1000L, "GET", "http://a", 200,
                     "summary-A", 50L,
-                    List.of(Finding.create("XSS", 80, "high", "descA",
+                    List.of(Finding.create(aid1, "XSS", 80, "high", "descA",
                             "GET", "http://a", 1000L, 1000L))));
-            store.addFindings(AnalysisResult.success(2000L, "GET", "http://b", 404,
+            String aid2 = "aid-B";
+            store.addFindings(AnalysisResult.success(aid2, 2000L, "GET", "http://b", 404,
                     "summary-B", 60L,
-                    List.of(Finding.create("SQL", 95, "critical", "descB",
+                    List.of(Finding.create(aid2, "SQL", 95, "critical", "descB",
                             "GET", "http://b", 2000L, 2000L))));
         }
         // 重新打开：数据应恢复
@@ -134,9 +137,10 @@ class FindingStoreTest {
     @Test
     void addFindingsWithoutFindingsStillCachesContext(@TempDir Path tempDir) throws Exception {
         try (FindingStore store = new FindingStore(tempDir, 100)) {
-            store.addFindings(AnalysisResult.success(123L, "GET", "http://a", 200,
+            String aid = "aid-empty";
+            store.addFindings(AnalysisResult.success(aid, 123L, "GET", "http://a", 200,
                     "本次未发现问题", 50L));
-            Finding probe = Finding.create("X", 50, "info", "d",
+            Finding probe = Finding.create(aid, "X", 50, "info", "d",
                     "GET", "http://a", 123L, 123L);
             FindingStore.AnalysisContext ctx = store.contextFor(probe);
             assertEquals("本次未发现问题", ctx.getSummary());
@@ -146,9 +150,9 @@ class FindingStoreTest {
     @Test
     void placeholderFindingsPersistAndReload(@TempDir Path tempDir) throws Exception {
         try (FindingStore store = new FindingStore(tempDir, 100)) {
-            store.addFindings(AnalysisResult.success(123L, "GET", "http://a", 200,
+            store.addFindings(AnalysisResult.success("aid", 123L, "GET", "http://a", 200,
                     "完整 analysis 文本", 50L,
-                    List.of(Finding.placeholder("截取自 analysis", Severity.HIGH,
+                    List.of(Finding.placeholder("aid", "截取自 analysis", Severity.HIGH,
                             "GET", "http://a", 123L, 123L))));
         }
         try (FindingStore reopened = new FindingStore(tempDir, 100)) {
@@ -169,12 +173,12 @@ class FindingStoreTest {
         // ——按新规则"晚安装"在后，"早安装"在前，而不是按可信度排。
         try (FindingStore store = new FindingStore(tempDir, 100)) {
             // Critical 装得晚（capturedAt=2000），confidence=30
-            store.addFindings(AnalysisResult.success(0L, "GET", "http://1", 200, "s", 0L,
-                    List.of(Finding.create("Critical", 30, "critical", "d",
+            store.addFindings(AnalysisResult.success("aid", 0L, "GET", "http://1", 200, "s", 0L,
+                    List.of(Finding.create("aid", "Critical", 30, "critical", "d",
                             "GET", "http://1", 2000L, 0L))));
             // High 装得早（capturedAt=1000），confidence=90
-            store.addFindings(AnalysisResult.success(0L, "GET", "http://2", 200, "s", 0L,
-                    List.of(Finding.create("High", 90, "high", "d",
+            store.addFindings(AnalysisResult.success("aid", 0L, "GET", "http://2", 200, "s", 0L,
+                    List.of(Finding.create("aid", "High", 90, "high", "d",
                             "GET", "http://2", 1000L, 0L))));
             List<Finding> list = store.list();
             // 安装时间升序：High(1000) 在前，Critical(2000) 在后
@@ -192,9 +196,10 @@ class FindingStoreTest {
         try (FindingStore store = new FindingStore(tempDir, 100)) {
             byte[] req = "GET /api?id=1 HTTP/1.1\r\nHost: x\r\n\r\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
             byte[] resp = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-            Finding f = Finding.create("X", 50, "info", "d",
+            String aid = "aid-bytes";
+            Finding f = Finding.create(aid, "X", 50, "info", "d",
                     "GET", "http://x", 123L, 123L);
-            store.addFindings(AnalysisResult.success(123L, "GET", "http://x", 200, "s", 0L, List.of(f)),
+            store.addFindings(AnalysisResult.success(aid, 123L, "GET", "http://x", 200, "s", 0L, List.of(f)),
                     req, resp);
             FindingStore.AnalysisContext ctx = store.contextFor(f);
             assertNotNull(ctx.getRequestBytes());
@@ -212,9 +217,9 @@ class FindingStoreTest {
         try (FindingStore store = new FindingStore(tempDir, 100)) {
             byte[] req = "GET / HTTP/1.1\r\n\r\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
             byte[] resp = "HTTP/1.1 200 OK\r\n\r\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-            Finding f = Finding.create("X", 50, "info", "d",
+            Finding f = Finding.create("aid", "X", 50, "info", "d",
                     "GET", "http://x", 1L, 1L);
-            store.addFindings(AnalysisResult.success(1L, "GET", "http://x", 200, "s", 0L, List.of(f)),
+            store.addFindings(AnalysisResult.success("aid", 1L, "GET", "http://x", 200, "s", 0L, List.of(f)),
                     req, resp);
         }
         // 重新打开 → context 里没有原文（持久化只写 finding 元数据 + summary）
@@ -235,9 +240,10 @@ class FindingStoreTest {
             byte[] big = new byte[1024 * 1024];
             for (int i = 0; i < 5; i++) {
                 long ts = 1000L + i;
-                Finding f = Finding.create("X" + i, 50, "info", "d",
+                String aid = "aid-cap-" + i;
+                Finding f = Finding.create(aid, "X" + i, 50, "info", "d",
                         "GET", "http://x" + i, ts, ts);
-                store.addFindings(AnalysisResult.success(ts, "GET", "http://x" + i, 200, "s" + i, 0L, List.of(f)),
+                store.addFindings(AnalysisResult.success(aid, ts, "GET", "http://x" + i, 200, "s" + i, 0L, List.of(f)),
                         big, big);
             }
             // 5 条 finding 都应该保留（远低于 maxFindings=100）
@@ -266,9 +272,10 @@ class FindingStoreTest {
             byte[] big = new byte[1024 * 1024];
             for (int i = 0; i < 3; i++) {
                 long ts = 1000L + i;
-                Finding f = Finding.create("X" + i, 50, "info", "d",
+                String aid = "aid-evict-" + i;
+                Finding f = Finding.create(aid, "X" + i, 50, "info", "d",
                         "GET", "http://x" + i, ts, ts);
-                store.addFindings(AnalysisResult.success(ts, "GET", "http://x" + i, 200, "s" + i, 0L, List.of(f)),
+                store.addFindings(AnalysisResult.success(aid, ts, "GET", "http://x" + i, 200, "s" + i, 0L, List.of(f)),
                         big, big);
             }
             // X0 已被淘汰：兜底 context 仍能从 finding 自身字段构造 method / url / summary 为空
@@ -288,9 +295,9 @@ class FindingStoreTest {
     @Test
     void removeByFindingIdRemovesEntryAndNotifies(@TempDir Path tempDir) throws Exception {
         try (FindingStore store = new FindingStore(tempDir, 100)) {
-            Finding f1 = Finding.create("XSS", 80, "high", "d1", "GET", "http://a", 1L, 1L);
-            Finding f2 = Finding.create("SQLi", 90, "high", "d2", "GET", "http://b", 2L, 1L);
-            store.addFindings(AnalysisResult.success(1L, "GET", "http://a", 200, "s", 0L, List.of(f1, f2)));
+            Finding f1 = Finding.create("aid", "XSS", 80, "high", "d1", "GET", "http://a", 1L, 1L);
+            Finding f2 = Finding.create("aid", "SQLi", 90, "high", "d2", "GET", "http://b", 2L, 1L);
+            store.addFindings(AnalysisResult.success("aid", 1L, "GET", "http://a", 200, "s", 0L, List.of(f1, f2)));
             assertEquals(2, store.list().size());
 
             AtomicInteger notifications = new AtomicInteger();
@@ -318,37 +325,36 @@ class FindingStoreTest {
         // 删除一条 finding 后，若它的 analysisTimestamp 没有其它 finding 引用，
         // 对应 AnalysisContext 也应被回收（避免 context 表长期持有已无主 finding 的字节）。
         try (FindingStore store = new FindingStore(tempDir, 100)) {
-            Finding f1 = Finding.create("XSS", 80, "high", "d1", "GET", "http://a", 1L, 10L);
-            Finding f2 = Finding.create("SQLi", 70, "high", "d2", "GET", "http://b", 2L, 20L);
-            // 两次独立分析：f1 → ts=10（带 req/resp 字节），f2 → ts=20（带另外一组字节）
-            store.addFindings(AnalysisResult.success(10L, "GET", "http://a", 200, "ctxA", 0L, List.of(f1)),
+            String aidA = "aid-A";
+            String aidB = "aid-B";
+            Finding f1 = Finding.create(aidA, "XSS", 80, "high", "d1", "GET", "http://a", 1L, 10L);
+            Finding f2 = Finding.create(aidB, "SQLi", 70, "high", "d2", "GET", "http://b", 2L, 20L);
+            store.addFindings(AnalysisResult.success(aidA, 10L, "GET", "http://a", 200, "ctxA", 0L, List.of(f1)),
                     new byte[]{1, 2, 3}, new byte[]{4});
-            store.addFindings(AnalysisResult.success(20L, "GET", "http://b", 200, "ctxB", 0L, List.of(f2)),
+            store.addFindings(AnalysisResult.success(aidB, 20L, "GET", "http://b", 200, "ctxB", 0L, List.of(f2)),
                     new byte[]{5}, new byte[]{6});
 
             Finding stored1 = store.list().stream()
-                    .filter(f -> f.getAnalysisTimestamp() == 10L).findFirst().orElseThrow();
+                    .filter(f -> aidA.equals(f.getAnalysisId())).findFirst().orElseThrow();
             Finding stored2 = store.list().stream()
-                    .filter(f -> f.getAnalysisTimestamp() == 20L).findFirst().orElseThrow();
+                    .filter(f -> aidB.equals(f.getAnalysisId())).findFirst().orElseThrow();
             assertEquals(2, store.list().size());
 
-            // 删除 f1：ts=10 没有其它引用 → context[10] 被回收
             assertTrue(store.remove(stored1.getFindingId()));
             assertEquals(1, store.list().size());
-            // 仍存在的 f2 应能拿到自己 ts=20 的原文
-            FindingStore.AnalysisContext ctx20 = store.contextFor(stored2);
-            assertNotNull(ctx20.getRequestBytes());
-            assertNotNull(ctx20.getResponseBytes());
+            FindingStore.AnalysisContext ctxB = store.contextFor(stored2);
+            assertNotNull(ctxB.getRequestBytes());
+            assertNotNull(ctxB.getResponseBytes());
         }
     }
 
     @Test
     void removeOneOfMultipleFindingsWithSameTimestampKeepsContext(@TempDir Path tempDir) throws Exception {
-        // 同一 analysisTimestamp 下有两条 finding：删一条，另一条仍引用 context → 不应回收
         try (FindingStore store = new FindingStore(tempDir, 100)) {
-            Finding f1 = Finding.create("XSS", 80, "high", "d1", "GET", "http://a", 1L, 10L);
-            Finding f2 = Finding.create("SQLi", 70, "high", "d2", "GET", "http://a", 2L, 10L);
-            store.addFindings(AnalysisResult.success(10L, "GET", "http://a", 200, "ctx", 0L, List.of(f1, f2)),
+            String aid = "aid-shared";
+            Finding f1 = Finding.create(aid, "XSS", 80, "high", "d1", "GET", "http://a", 1L, 10L);
+            Finding f2 = Finding.create(aid, "SQLi", 70, "high", "d2", "GET", "http://a", 2L, 10L);
+            store.addFindings(AnalysisResult.success(aid, 10L, "GET", "http://a", 200, "ctx", 0L, List.of(f1, f2)),
                     new byte[]{1, 2, 3}, new byte[]{4});
 
             List<Finding> all = store.list();
@@ -356,7 +362,6 @@ class FindingStoreTest {
             Finding one = all.get(0);
             Finding other = all.get(1);
 
-            // 删一条：另一条仍引用 ts=10 → context 不应被回收
             assertTrue(store.remove(one.getFindingId()));
             assertEquals(1, store.list().size());
 

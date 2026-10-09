@@ -19,24 +19,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * {@link AnalysisHistoryStore} 单元测试：
- * <ul>
- *   <li>基本 add / get / list 行为；</li>
- *   <li>容量淘汰：超出 maxEntries 时按插入顺序淘汰最旧；</li>
- *   <li>单条字节裁剪：超过 maxEntryBytes 的 body 走 BodyStorage 策略；</li>
- *   <li>findByDomain：基于二级域名的同域反查；</li>
- *   <li>findLatestByUrl：(method, url) 取最近一条；</li>
- *   <li>落盘 + 重启加载：index.json + bodies/ 持久化 + 重新构造可读回；</li>
- *   <li>clear：清空后 list 为空，磁盘 bodies 也清空；</li>
- *   <li>delete：按 id 删单条、不误删其它记录、释放不再被引用的 body 文件；</li>
- *   <li>老 ProxyTrafficStore 数据清理：构造时检测到 &lt;sessionRoot&gt;/bodies + index.json 自动删。</li>
- * </ul>
+ *   基本 add / get / list 行为；
+ *   容量淘汰：超出 maxEntries 时按插入顺序淘汰最旧；
+ *   单条字节裁剪：超过 maxEntryBytes 的 body 走 BodyStorage 策略；
+ *   findByDomain：基于二级域名的同域反查；
+ *   findLatestByUrl：(method, url) 取最近一条；
+ *   落盘 + 重启加载：index.json + bodies/ 持久化 + 重新构造可读回；
+ *   clear：清空后 list 为空，磁盘 bodies 也清空；
+ *   delete：按 id 删单条、不误删其它记录、释放不再被引用的 body 文件；
+ *   老 ProxyTrafficStore 数据清理：构造时检测到 &lt;sessionRoot&gt;/bodies + index.json 自动删。
  */
 class AnalysisHistoryStoreTest {
 
     @Test
     void addAndGet_basicEntry(@TempDir Path tempDir) throws Exception {
         AnalysisHistoryStore store = newStore(tempDir);
-        AnalysisResult result = AnalysisResult.success(1000L, "GET", "http://example.com/api", 200,
+        AnalysisResult result = AnalysisResult.success("aid", 1000L, "GET", "http://example.com/api", 200,
                 "ok", 50L, List.of());
         long id = store.add(result, AnalysisTrigger.MANUAL,
                 "GET /api HTTP/1.1\r\nHost: example.com\r\n\r\n".getBytes(StandardCharsets.UTF_8),
@@ -55,7 +53,7 @@ class AnalysisHistoryStoreTest {
     @Test
     void add_errorResult_isRecorded(@TempDir Path tempDir) throws Exception {
         AnalysisHistoryStore store = newStore(tempDir);
-        AnalysisResult result = AnalysisResult.error(2000L, "POST", "http://x.test/v1", 500, "boom", 30L);
+        AnalysisResult result = AnalysisResult.error("aid", 2000L, "POST", "http://x.test/v1", 500, "boom", 30L);
         long id = store.add(result, AnalysisTrigger.PASSIVE, null, null, null);
         AnalysisHistoryEntry entry = store.get(id);
         assertNotNull(entry);
@@ -171,10 +169,10 @@ class AnalysisHistoryStoreTest {
     /**
      * 重启后 {@code totalBodyBytes} 必须按磁盘实际情况重建。
      *
-     * <p>回归用例：该字段只在"新建 body 文件"时累加，历史实现 {@code loadIndex} 不重建它，
+     * 回归用例：该字段只在"新建 body 文件"时累加，历史实现 {@code loadIndex} 不重建它，
      * 于是重启后它停在 0——{@code DEFAULT_MAX_TOTAL_BYTES}（200MB 磁盘上限）完全失效，
      * 且后续 {@code deleteUnreferencedBodies} 的扣减会扣掉从未计入的字节（被 {@code Math.max(0,..)}
-     * 夹断），计数只单向偏低。用反射直接断言私有字段，因为磁盘上限常量不可注入。</p>
+     * 夹断），计数只单向偏低。用反射直接断言私有字段，因为磁盘上限常量不可注入。
      */
     @Test
     void reopenedStore_rebuildsTotalBodyBytes(@TempDir Path tempDir) throws Exception {
@@ -393,12 +391,12 @@ class AnalysisHistoryStoreTest {
      * 关键不变量：500ms 防抖窗口内的连续 {@code add} 调用，必须有一条统一的调度器
      * 线程任务负责把脏数据补写盘，进程退出前这条数据不能丢。
      *
-     * <p>已知失败模式：如果落盘只在每次 {@code add} 调用时根据
+     * 已知失败模式：如果落盘只在每次 {@code add} 调用时根据
      * "距上次落盘是否已过 500ms"决定是否 flush——500ms 窗口内连续 add 多次时，
-     * 第一次 flush、其余只置 dirty 标位但<b>没有任何调度器</b>消费，
+     * 第一次 flush、其余只置 dirty 标位但没有任何调度器消费，
      * 进程退出时这条数据就丢了。本测试构造 100 条 add 间隔 5ms（远小于 500ms
      * 防抖窗口），然后等 600ms 让调度器任务跑完，验证重新打开 store 能读回全部
-     * 100 条。</p>
+     * 100 条。
      */
     @Test
     void burstAddsAllPersistedViaScheduler(@TempDir Path tempDir) throws Exception {
@@ -426,7 +424,7 @@ class AnalysisHistoryStoreTest {
     }
 
     private static AnalysisResult success(long timestamp, String method, String url) {
-        return AnalysisResult.success(timestamp, method, url, 200, "ok", 0L, List.of());
+        return AnalysisResult.success("aid", timestamp, method, url, 200, "ok", 0L, List.of());
     }
 
     private static long countBodyFiles(Path tempDir) throws IOException {

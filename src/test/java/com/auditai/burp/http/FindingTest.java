@@ -14,7 +14,7 @@ class FindingTest {
 
     @Test
     void createReplacesBlankFields() {
-        Finding f = Finding.create("  ", null, null, "", null, null,
+        Finding f = Finding.create("aid", "  ", null, null, "", null, null,
                 100L, 50L);
         assertEquals("未分类", f.getType());
         assertEquals(0, f.getConfidence());
@@ -29,18 +29,18 @@ class FindingTest {
 
     @Test
     void createClampsConfidence() {
-        Finding high = Finding.create("x", 200, "high", "d", "GET", "http://x",
+        Finding high = Finding.create("aid", "x", 200, "high", "d", "GET", "http://x",
                 0L, 0L);
         assertEquals(100, high.getConfidence());
-        Finding low = Finding.create("x", -50, "low", "d", "GET", "http://x",
+        Finding low = Finding.create("aid", "x", -50, "low", "d", "GET", "http://x",
                 0L, 0L);
         assertEquals(0, low.getConfidence());
     }
 
     @Test
     void findingIdIsUniquePerCall() {
-        Finding a = Finding.create("x", 50, "info", "d", "GET", "http://x", 0L, 0L);
-        Finding b = Finding.create("x", 50, "info", "d", "GET", "http://x", 0L, 0L);
+        Finding a = Finding.create("aid", "x", 50, "info", "d", "GET", "http://x", 0L, 0L);
+        Finding b = Finding.create("aid", "x", 50, "info", "d", "GET", "http://x", 0L, 0L);
         assertNotNull(a.getFindingId());
         assertNotNull(b.getFindingId());
         assertNotEquals(a.getFindingId(), b.getFindingId());
@@ -48,7 +48,7 @@ class FindingTest {
 
     @Test
     void placeholderMarksAsPlaceholder() {
-        Finding f = Finding.placeholder("分析摘要", Severity.HIGH,
+        Finding f = Finding.placeholder("aid", "分析摘要", Severity.HIGH,
                 "GET", "http://x", 0L, 0L);
         assertTrue(f.isPlaceholder());
         assertEquals("需关注", f.getType());
@@ -60,10 +60,10 @@ class FindingTest {
 
     @Test
     void placeholderConfidenceMappingBySeverity() {
-        assertEquals(75, Finding.placeholder("a", Severity.CRITICAL, "GET", "u", 0L, 0L).getConfidence());
-        assertEquals(65, Finding.placeholder("a", Severity.HIGH, "GET", "u", 0L, 0L).getConfidence());
-        assertEquals(50, Finding.placeholder("a", Severity.MEDIUM, "GET", "u", 0L, 0L).getConfidence());
-        assertEquals(35, Finding.placeholder("a", Severity.LOW, "GET", "u", 0L, 0L).getConfidence());
-        assertEquals(20, Finding.placeholder("a", Severity.INFO, "GET", "u", 0L, 0L).getConfidence());
+        assertEquals(75, Finding.placeholder("aid", "a", Severity.CRITICAL, "GET", "u", 0L, 0L).getConfidence());
+        assertEquals(65, Finding.placeholder("aid", "a", Severity.HIGH, "GET", "u", 0L, 0L).getConfidence());
+        assertEquals(50, Finding.placeholder("aid", "a", Severity.MEDIUM, "GET", "u", 0L, 0L).getConfidence());
+        assertEquals(35, Finding.placeholder("aid", "a", Severity.LOW, "GET", "u", 0L, 0L).getConfidence());
+        assertEquals(20, Finding.placeholder("aid", "a", Severity.INFO, "GET", "u", 0L, 0L).getConfidence());
     }
 }

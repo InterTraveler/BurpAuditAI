@@ -3,21 +3,25 @@ package com.auditai.burp.history;
 import com.google.gson.JsonObject;
 
 import java.nio.file.Path;
+import java.util.Objects;
 
 /**
  * 单条"经 AI 分析过的报文"快照。
  *
- * <p>由 {@link AnalysisHistoryStore} 在分析完成回调里一次性构造，UI 只读；
- * 所有字段在构造时确定，之后不再修改，天然线程安全。</p>
+ * 由 {@link AnalysisHistoryStore} 在分析完成回调里一次性构造，UI 只读；
+ * 所有字段在构造时确定，之后不再修改，天然线程安全。
  *
- * <p>正文（request/response 字节）落盘到独立 gzip 文件，本类只保留文件路径；
+ * 正文（request/response 字节）落盘到独立 gzip 文件，本类只保留文件路径；
  * UI 选中行时通过 {@link #getRequestFile()} / {@link #getResponseFile()} 拿到
- * 路径再由 {@code BodyStorage.readCompressed} 按需解压读盘，内存峰值可控。</p>
+ * 路径再由 {@code BodyStorage.readCompressed} 按需解压读盘，内存峰值可控。
  */
 public final class AnalysisHistoryEntry {
 
     /** 自增 ID（按分析时间升序；UI "序号" 列直接展示）。 */
     private final long id;
+
+    /** 本次分析的关联 ID，与 AnalysisResult / Finding 的 analysisId 一致。 */
+    private final String analysisId;
 
     /** 分析开始时间戳（毫秒），与 {@link com.auditai.burp.http.AnalysisResult#getTimestampMillis()} 一致。 */
     private final long timestamp;
@@ -76,12 +80,12 @@ public final class AnalysisHistoryEntry {
     /**
      * 被动分析指纹（{@link com.auditai.burp.passive.RequestFingerprint#compute} 的输出）。
      *
-     * <p>在 {@link AnalysisHistoryStore#add} 写入时一次性计算并落盘，启动时
+     * 在 {@link AnalysisHistoryStore#add} 写入时一次性计算并落盘，启动时
      * {@link com.auditai.burp.passive.FingerprintDedup} 读它做去重预热——保证 dedup
-     * 与 history 的指纹算法完全一致（避免 body 哈希口径不同导致 miss）。</p>
+     * 与 history 的指纹算法完全一致（避免 body 哈希口径不同导致 miss）。
      *
-     * <p>老数据（升级前写入的 entry）反序列化时该字段为 {@code null}，启动预热会跳过，
-     * 不影响加载与展示。</p>
+     * 老数据（升级前写入的 entry）反序列化时该字段为 {@code null}，启动预热会跳过，
+     * 不影响加载与展示。
      */
     private final String requestFingerprint;
 
@@ -122,7 +126,7 @@ public final class AnalysisHistoryEntry {
      * @param findingCount      finding 数量。
      * @param auditTrailFile    审计轨迹 XML 文件路径（可空：取消 / 不启用 audit-trail 时为 null）。
      */
-    public AnalysisHistoryEntry(long id, long timestamp, AnalysisTrigger triggerType,
+    public AnalysisHistoryEntry(long id, String analysisId, long timestamp, AnalysisTrigger triggerType,
                                 String method, String url, int statusCode,
                                 String summary, String error, RiskLevel riskLevel,
                                 long durationMillis, boolean hasResponse,
@@ -134,6 +138,7 @@ public final class AnalysisHistoryEntry {
                                 int findingCount,
                                 Path auditTrailFile) {
         this.id = id;
+        this.analysisId = Objects.requireNonNull(analysisId, "analysisId");
         this.timestamp = timestamp;
         this.triggerType = triggerType;
         this.method = method == null ? "" : method;
@@ -159,6 +164,13 @@ public final class AnalysisHistoryEntry {
 
     public long getId() {
         return id;
+    }
+
+    /**
+     * 本次分析的关联 ID；与 AnalysisResult.getAnalysisId() 与 Finding.getAnalysisId() 一致。
+     */
+    public String getAnalysisId() {
+        return analysisId;
     }
 
     public long getTimestamp() {
@@ -236,8 +248,8 @@ public final class AnalysisHistoryEntry {
     /**
      * 被动分析指纹（{@link com.auditai.burp.passive.RequestFingerprint#compute} 输出）。
      *
-     * <p>可能为 {@code null}：写入前调用方未传、或从老 index.json 升级上来的 entry。
-     * 调用方使用前应做 null 检查。</p>
+     * 可能为 {@code null}：写入前调用方未传、或从老 index.json 升级上来的 entry。
+     * 调用方使用前应做 null 检查。
      */
     public String getRequestFingerprint() {
         return requestFingerprint;
@@ -258,11 +270,12 @@ public final class AnalysisHistoryEntry {
     /**
      * 序列化为 JSON：供 {@link AnalysisHistoryStore} 写入 index.json。
      *
-     * <p>仅持久化轻量元数据 + 路径 / 哈希，<b>不</b>包含 body 字节（body 单独落盘）。</p>
+     * 仅持久化轻量元数据 + 路径 / 哈希，不包含 body 字节（body 单独落盘）。
      */
     JsonObject toJson() {
         JsonObject obj = new JsonObject();
         obj.addProperty("id", id);
+        obj.addProperty("analysisId", analysisId);
         obj.addProperty("timestamp", timestamp);
         obj.addProperty("triggerType", triggerType.name());
         obj.addProperty("method", method);
@@ -353,7 +366,8 @@ public final class AnalysisHistoryEntry {
                 ? obj.get("findingCount").getAsInt() : 0;
         Path auditTrailFile = obj.has("auditTrailFile") && obj.get("auditTrailFile").isJsonPrimitive()
                 ? java.nio.file.Paths.get(obj.get("auditTrailFile").getAsString()) : null;
-        return new AnalysisHistoryEntry(id, ts, trigger, method, url, statusCode,
+        String analysisId = obj.get("analysisId").getAsString();
+        return new AnalysisHistoryEntry(id, analysisId, ts, trigger, method, url, statusCode,
                 summary, error, risk, duration, hasResp, null, null,
                 reqTrunc, respTrunc, reqFile, respFile, reqHash, respHash, reqFp, findingCount,
                 auditTrailFile);

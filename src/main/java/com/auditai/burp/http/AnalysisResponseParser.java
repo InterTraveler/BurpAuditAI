@@ -12,16 +12,14 @@ import java.util.Set;
  * 模型原始响应的解析器：从 {@code choices[0].message.content} 返回的文本中抽出
  * 业务字段（active_skill_ids / analysis / risk / findings）。
  *
- * <p>把这段逻辑从 {@link TrafficAnalyzer} 拆出来有两点好处：</p>
- * <ul>
- *   <li>TrafficAnalyzer 专注编排（执行器 / 阶段切换 / 占位符替换），不再夹杂 JSON 解析；</li>
- *   <li>本类每个方法都是纯函数式的（输入 rawText + context，输出解析结果），
- *       单测覆盖极其便宜（见 TrafficAnalyzerFindingsTest / TrafficAnalyzerJsonTest）。</li>
- * </ul>
+ * 把这段逻辑从 {@link TrafficAnalyzer} 拆出来有两点好处：
+ *   TrafficAnalyzer 专注编排（执行器 / 阶段切换 / 占位符替换），不再夹杂 JSON 解析；
+ *   本类每个方法都是纯函数式的（输入 rawText + context，输出解析结果），
+ *       单测覆盖极其便宜（见 TrafficAnalyzerFindingsTest / TrafficAnalyzerJsonTest）。
  *
- * <p>容错约定：所有方法都不抛业务异常（除调用方传 null），统一降级为
+ * 容错约定：所有方法都不抛业务异常（除调用方传 null），统一降级为
  * "无 findings / hasIssue=false" 或 "返回原文当 analysis"。这与原
- * {@code TrafficAnalyzer} 行为一致——任何解析失败都不能阻塞"模型给回答"的主流程。</p>
+ * {@code TrafficAnalyzer} 行为一致——任何解析失败都不能阻塞"模型给回答"的主流程。
  */
 public final class AnalysisResponseParser {
 
@@ -30,20 +28,20 @@ public final class AnalysisResponseParser {
     /**
      * 结构化 finding 入库所需的最低可信度（{@code 0–100} 整数）。
      *
-     * <p>取值依据：{@link Finding} 注释定义"80+ 高 / 60–80 中 / <60 偏可疑"，
+     * 取值依据：{@link Finding} 注释定义"80+ 高 / 60–80 中 / <60 偏可疑"，
      * 10 处于"偏可疑"档下沿；{@code confidence} 字段缺失或低于此值的 finding
-     * 视为噪声、不进入问题列表。</p>
+     * 视为噪声、不进入问题列表。
      */
     public static final int DEFAULT_MIN_CONFIDENCE = 10;
 
     /**
      * 阶段 1 协议字段 {@code analysis} 的兜底字段名（按优先级排列）。
      *
-     * <p>某些推理模型（o1 / o3 / DeepSeek-R1 / Gemini Thinking 等）习惯用
+     * 某些推理模型（o1 / o3 / DeepSeek-R1 / Gemini Thinking 等）习惯用
      * {@code {"thoughts": "...", "response": "..."}} 这种"思考 + 回答"的结构。
      * 如果模型没用协议字段 {@code analysis}，而用了 {@code response} / {@code text} /
      * {@code content} / {@code output} 之一表达"最终回答"，解析器会按这个顺序兜底
-     * 抽取，避免把这类有效输出误判为"模型未返回结论"导致阶段 2 重复调用却拿到同样拒答。</p>
+     * 抽取，避免把这类有效输出误判为"模型未返回结论"导致阶段 2 重复调用却拿到同样拒答。
      */
     private static final List<String> ANALYSIS_FALLBACK_KEYS =
             List.of("response", "text", "content", "output");
@@ -52,22 +50,20 @@ public final class AnalysisResponseParser {
      * 阶段 1：把模型原始响应解析为阶段 1 协议字段（active_skill_ids + analysis）。
      * 解析失败返回 null，调用方应走"全量启用兜底"。
      *
-     * <p><b>容错策略</b>：本方法对外语义不变，仍是"尽力解析；全部失败返 null"。
+     * 容错策略：本方法对外语义不变，仍是"尽力解析；全部失败返 null"。
      * 但内部采用三级 fallback，避免小模型在 {@code analysis} 字段里写未转义英文双引号
-     * 破坏 JSON 结构时被错判成"解析失败"，进而触发无意义的阶段 2 重放：</p>
-     * <ol>
-     *   <li><b>标准严格解析</b>：直接 {@link JsonParser#parseString}（最常见路径，
-     *       OpenAI / DeepSeek / 强制 {@code response_format=json_object} 的厂商都走这条）；</li>
-     *   <li><b>宽松预处理</b>：去 markdown 围栏（```json ... ```）+ 截取顶层
-     *       {@code {...}} 范围（处理"模型在 JSON 前后夹杂说明文字"）；</li>
-     *   <li><b>字符级字段 fallback</b>：当 JSON 整体无法被 gson 解析时（典型场景：
+     * 破坏 JSON 结构时被错判成"解析失败"，进而触发无意义的阶段 2 重放：
+     *   标准严格解析：直接 {@link JsonParser#parseString}（最常见路径，
+     *       OpenAI / DeepSeek / 强制 {@code response_format=json_object} 的厂商都走这条）；
+     *   宽松预处理：去 markdown 围栏（```json ... ```）+ 截取顶层
+     *       {@code {...}} 范围（处理"模型在 JSON 前后夹杂说明文字"）；
+     *   字符级字段 fallback：当 JSON 整体无法被 gson 解析时（典型场景：
      *       {@code analysis} 字段值内含未转义英文双引号破坏了字符串边界），
      *       用字符级扫描定位 {@code "analysis"} 字段，并以"协议约定的下一个字段边界"
      *       （{@code ", "risk"} / {@code ", "findings"} / {@code "} / {@code "]"}）
      *       作为右边界直接提取字符串值——能容忍字段值内的任意裸引号。
      *       这种"基于协议边界的启发式"对遵守协议的模型 100% 准确，对破坏协议的模型
-     *       仍能挽救绝大多数有效结论。</li>
-     * </ol>
+     *       仍能挽救绝大多数有效结论。
      */
     public static ParsedSelection tryParseSelection(String rawText) {
         if (rawText == null || rawText.isEmpty()) {
@@ -86,12 +82,12 @@ public final class AnalysisResponseParser {
      * 阶段 1 解析"带失败原因"版：与 {@link #tryParseSelection} 解析结果一致，但失败时
      * 额外返回 {@link ParseAttempt#failureReason()}，供调用方打 ERROR 日志或走 fail-fast 路径。
      *
-     * <p>设计动机：当三级 fallback 全部失败（即模型返回的文本根本不是 JSON 对象、且宽松
+     * 设计动机：当三级 fallback 全部失败（即模型返回的文本根本不是 JSON 对象、且宽松
      * 字段提取也找不到 analysis 字段）时，仅靠"返回 null"对调用方而言很难判断是该走
      * "全量启用兜底 → 进 phase 2"还是"fail-fast 跳过 phase 2"——前者会让阶段 2 在已知
      * 模型会乱返的情况下又访问一次模型，浪费 token + 延迟 + 误导后续调试。
      * 本方法暴露失败原因，让 {@code TrafficAnalyzer} 能在 "全量启用兜底" 之外选择
-     * "fail-fast 直接收尾" 的新策略。</p>
+     * "fail-fast 直接收尾" 的新策略。
      */
     public static ParseAttempt tryParseSelectionWithReason(String rawText) {
         if (rawText == null || rawText.isEmpty()) {
@@ -159,15 +155,13 @@ public final class AnalysisResponseParser {
     /**
      * 宽松解析：去 markdown 围栏 + 截取顶层 {@code {...}} 范围 + 字符级字段 fallback。
      *
-     * <p>分两步走：</p>
-     * <ol>
-     *   <li>先尝试截取 {@code {...}} 范围再严格解析（处理"夹杂前后说明文字 + 围栏"场景，
-     *       比如本地小模型常输出 {@code 下面是分析：\n{...}\n分析完毕}）；</li>
-     *   <li>仍失败则用 {@link #extractAnalysisFieldLenient} 直接抓 {@code analysis}
+     * 分两步走：
+     *   先尝试截取 {@code {...}} 范围再严格解析（处理"夹杂前后说明文字 + 围栏"场景，
+     *       比如本地小模型常输出 {@code 下面是分析：\n{...}\n分析完毕}）；
+     *   仍失败则用 {@link #extractAnalysisFieldLenient} 直接抓 {@code analysis}
      *       字段值（处理"分析字段值含内部裸引号"破坏 JSON 结构的场景），
      *       抓得到就当 {@code active_skill_ids=[] + analysis=提取值} 返回——这正好
-     *       命中 {@link #resolveSelection} 的 "skipPhase2" 决策，agent 直接收尾。</li>
-     * </ol>
+     *       命中 {@link #resolveSelection} 的 "skipPhase2" 决策，agent 直接收尾。
      */
     private static ParsedSelection tryParseSelectionLenient(String rawText) {
         String trimmed = stripMarkdownFence(rawText.trim());
@@ -192,15 +186,15 @@ public final class AnalysisResponseParser {
     /**
      * 字符级从破损 JSON 里提取 {@code analysis} 字段值。
      *
-     * <p>关键设计：放弃"逐字符严格 JSON 状态机"，改用"协议约定的字段边界"作为右边界——
+     * 关键设计：放弃"逐字符严格 JSON 状态机"，改用"协议约定的字段边界"作为右边界——
      * 即在 {@code "analysis": "..."} 后扫描 {@code ", "risk"} / {@code ", "findings"} /
      * {@code "} / {@code "]"} 之一，避开字段值内部所有引号（包括未转义的）。这样即便
-     * 小模型在分析里写 {@code 他说"你好"后走了}，仍能完整提取。</p>
+     * 小模型在分析里写 {@code 他说"你好"后走了}，仍能完整提取。
      *
-     * <p>corner case：模型在 analysis 里"自己写" {@code ", "risk" / "} 之类的内容时
+     * corner case：模型在 analysis 里"自己写" {@code ", "risk" / "} 之类的内容时
      * 会截断——但合规模型的 analysis 不会含这些字面量（建议通过提示词约束 analysis
      * 字段内不使用英文双引号来进一步降低概率，详见 skill-selection-format_zh.txt /
-     * output-format_zh.txt 的字段说明）。</p>
+     * output-format_zh.txt 的字段说明）。
      */
     private static String extractAnalysisFieldLenient(String s) {
         String key = "\"analysis\"";
@@ -244,13 +238,11 @@ public final class AnalysisResponseParser {
     /**
      * 找 {@code analysis} 字段的协议边界（右边界）。
      *
-     * <p>按协议，{@code analysis} 字段值后必是以下之一：</p>
-     * <ul>
-     *   <li>{@code ", "risk"} —— 后面紧跟 risk 字段；</li>
-     *   <li>{@code ", "findings"} —— 后面紧跟 findings 字段（仅当没有 risk 时）；</li>
-     *   <li>{@code "} —— analysis 是对象最后一个字段；</li>
-     *   <li>{@code "]} —— analysis 是 findings 数组里某个对象的字段。</li>
-     * </ul>
+     * 按协议，{@code analysis} 字段值后必是以下之一：
+     *   {@code ", "risk"} —— 后面紧跟 risk 字段；
+     *   {@code ", "findings"} —— 后面紧跟 findings 字段（仅当没有 risk 时）；
+     *   {@code "} —— analysis 是对象最后一个字段；
+     *   {@code "]} —— analysis 是 findings 数组里某个对象的字段。
      * 取以上最早出现的非转义位置作为右边界。{@link #indexOfUnescaped} 保证
      * {@code \"} 不被误判为边界。
      */
@@ -387,37 +379,33 @@ public final class AnalysisResponseParser {
     /**
      * 阶段 1 解析后的调度决策：把"模型选了什么"转成"下一步要做什么"。
      *
-     * <p>决策表（核心原则：除"JSON 真的解析不出来"以外，<b>任何</b>情形都不应扩张到
-     * 全量启用兜底——模型明确表达的"不要技能"必须被尊重）：</p>
-     * <ul>
-     *   <li>{@code parsed == null}（JSON 完全无法解析）→ 全量启用 enabledSkills 兜底，
-     *       需走阶段 2。<b>这是唯一允许"全量扩张"的情形</b>；</li>
-     *   <li>active_skill_ids 非空 + 命中至少一个合法 id → 用合法 id 子集，需走阶段 2；</li>
-     *   <li>active_skill_ids 非空 + 全部非法 id（模型幻觉 / 拼写错 / 版本不匹配）→
-     *       <b>不</b>降级到全量兜底——模型明确说了"我要用 X"，X 不存在就老老实实告诉它不存在，
+     * 决策表（核心原则：除"JSON 真的解析不出来"以外，任何情形都不应扩张到
+     * 全量启用兜底——模型明确表达的"不要技能"必须被尊重）：
+     *   {@code parsed == null}（JSON 完全无法解析）→ 全量启用 enabledSkills 兜底，
+     *       需走阶段 2。这是唯一允许"全量扩张"的情形；
+     *   active_skill_ids 非空 + 命中至少一个合法 id → 用合法 id 子集，需走阶段 2；
+     *   active_skill_ids 非空 + 全部非法 id（模型幻觉 / 拼写错 / 版本不匹配）→
+     *       不降级到全量兜底——模型明确说了"我要用 X"，X 不存在就老老实实告诉它不存在，
      *       而不是偷偷把所有技能都塞给它让 prompt 爆炸；
-     *       跳阶段 2 直接用模型给出的 analysis 收尾（若有），没有就当解析失败走 fail-fast；</li>
-     *   <li>active_skill_ids 空 + analysis 非空 → 模型主动给结论，不走阶段 2；</li>
-     *   <li>active_skill_ids 空 + analysis 空 → 模型主动"啥都没说"，尊重这个意图——
-     *       <b>不</b>扩张到全量启用，跳阶段 2 返回空 analysis，让上层按"模型没结论"兜底。
+     *       跳阶段 2 直接用模型给出的 analysis 收尾（若有），没有就当解析失败走 fail-fast；
+     *   active_skill_ids 空 + analysis 非空 → 模型主动给结论，不走阶段 2；
+     *   active_skill_ids 空 + analysis 空 → 模型主动"啥都没说"，尊重这个意图——
+     *       不扩张到全量启用，跳阶段 2 返回空 analysis，让上层按"模型没结论"兜底。
      *       这条与"全部非法 id"同源——两类情况都对应"模型明确表达了'不要技能'"的语义，
-     *       偷偷扩张只会让单次分析吃满上下文。</li>
-     * </ul>
+     *       偷偷扩张只会让单次分析吃满上下文。
      *
-     * <p>原则细节：模型返回 {@code active_skill_ids=[]} 有两种可能——</p>
-     * <ol>
-     *   <li>模型认为不需要技能辅助（合理收尾路径），用其 analysis 直接结；</li>
-     *   <li>模型返回结构合法但啥都没说（bug 或被截断的输出）。</li>
-     * </ol>
+     * 原则细节：模型返回 {@code active_skill_ids=[]} 有两种可能——
+     *   模型认为不需要技能辅助（合理收尾路径），用其 analysis 直接结；
+     *   模型返回结构合法但啥都没说（bug 或被截断的输出）。
      *
-     * <p>两种都属于"模型没要技能"的语义，<b>都不应该</b>被偷偷扩张到全量启用——后者只会让
+     * 两种都属于"模型没要技能"的语义，都不应该被偷偷扩张到全量启用——后者只会让
      * 一个本就空白的 phase 2 调用白白吃掉几万个 token 的 system 段（所有启用技能 prompt 拼接）。
      * 当前阶段 1 解析失败的兜底走 {@link TrafficAnalyzer} 自身的 fail-fast 路径（详见其
      * {@code analyze} 方法），所以本方法只有在被直接调用时（测试 / 未来重构）才走
-     * "JSON 解析失败 → 全量兜底"分支。</p>
+     * "JSON 解析失败 → 全量兜底"分支。
      *
-     * <p>被拒绝的非法 id 通过 {@link SelectionResult#unknownIds()} 透传给上层记一条
-     * info 日志——方便排查"模型为啥挑了不存在的技能"。</p>
+     * 被拒绝的非法 id 通过 {@link SelectionResult#unknownIds()} 透传给上层记一条
+     * info 日志——方便排查"模型为啥挑了不存在的技能"。
      */
     public static SelectionResult resolveSelection(ParsedSelection parsed, List<Skill> enabledSkills) {
         if (parsed == null) {
@@ -463,7 +451,7 @@ public final class AnalysisResponseParser {
                     unknownIds);
         }
         // 情形 C：模型压根没挑任何 skill（active_skill_ids=[] 或字段缺失）——
-        // 不管 analysis 是否为空，<b>都不</b>扩张到全量启用。
+        // 不管 analysis 是否为空，都不扩张到全量启用。
         if (parsed.analysis != null && !parsed.analysis.isEmpty()) {
             // 模型主动给结论 —— 用之收尾。
             return SelectionResult.skipPhase2(parsed.analysis);
@@ -476,9 +464,9 @@ public final class AnalysisResponseParser {
     /**
      * 从模型原始响应中提取 {@code analysis} 字段；失败时回退原文。
      *
-     * <p>兼容推理模型常用的非协议字段：详见 {@link #ANALYSIS_FALLBACK_KEYS}。
+     * 兼容推理模型常用的非协议字段：详见 {@link #ANALYSIS_FALLBACK_KEYS}。
      * 也就是说，当模型用 {@code {"response": "..."}} 而不是 {@code {"analysis": "..."}}
-     * 表达"最终回答"时，本方法也会把 {@code response} 的内容提取出来展示给用户。</p>
+     * 表达"最终回答"时，本方法也会把 {@code response} 的内容提取出来展示给用户。
      */
     public static String extractAnalysis(String rawText) {
         if (rawText == null || rawText.isEmpty()) {
@@ -502,30 +490,30 @@ public final class AnalysisResponseParser {
      * 从模型原始响应中解析"问题元数据 + 结构化 findings"。{@code findings[]} 中
      * 每条 finding 的可信度低于 {@link #DEFAULT_MIN_CONFIDENCE} 时不入库——视为噪声。
      *
-     * <p>每条 finding 的严重度优先取自身的 {@code severity} 字段（缺失时回退到
-     * 整次分析的 {@code risk}），可信度 / 描述 / method / url 同理按字段回退。</p>
+     * 每条 finding 的严重度优先取自身的 {@code severity} 字段（缺失时回退到
+     * 整次分析的 {@code risk}），可信度 / 描述 / method / url 同理按字段回退。
      *
      * @return 三块信息：hasIssue / riskLevel / findings 列表。失败时一律降级为
      *         {@code (false, INFO, [])}。
      */
-    public static ExtractedFindings extractFindings(String rawText, String fallbackMethod, String fallbackUrl,
+    public static ExtractedFindings extractFindings(String analysisId, String rawText, String fallbackMethod, String fallbackUrl,
                                                     long capturedAtMillis, long analysisTimestamp) {
-        return extractFindings(rawText, fallbackMethod, fallbackUrl,
+        return extractFindings(analysisId, rawText, fallbackMethod, fallbackUrl,
                 capturedAtMillis, analysisTimestamp, DEFAULT_MIN_CONFIDENCE);
     }
 
     /**
      * 带置信度阈值参数的解析入口。
      *
-     * <p>{@code confidence} 字段缺失或低于 {@code minConfidence} 的 finding 直接
+     * {@code confidence} 字段缺失或低于 {@code minConfidence} 的 finding 直接
      * 跳过，不进入 {@link ExtractedFindings#findings()}。当所有 finding 都被过滤
      * 且整体 {@code risk} 仅为 INFO 时，{@link ExtractedFindings#hasIssue()} 同步
-     * 置为 {@code false}。</p>
+     * 置为 {@code false}。
      *
      * @param minConfidence 入库最低可信度（0–100 整数）。生产链路默认走
      *                      {@link #DEFAULT_MIN_CONFIDENCE}，单测可用更小值排查边界。
      */
-    public static ExtractedFindings extractFindings(String rawText, String fallbackMethod, String fallbackUrl,
+    public static ExtractedFindings extractFindings(String analysisId, String rawText, String fallbackMethod, String fallbackUrl,
                                                     long capturedAtMillis, long analysisTimestamp,
                                                     int minConfidence) {
         if (rawText == null || rawText.isEmpty()) {
@@ -565,6 +553,7 @@ public final class AnalysisResponseParser {
                             ? findingSeverity : riskLevel.name();
                     try {
                         findings.add(Finding.create(
+                                analysisId,
                                 type,
                                 confidence,
                                 effectiveSeverity,
@@ -592,16 +581,14 @@ public final class AnalysisResponseParser {
 
     /**
      * 把 {@link ExtractedFindings} 按决策表转成最终入库的 finding 列表：
-     * <ol>
-     *   <li>findings 非空 → 直接用；</li>
-     *   <li>findings 空 + hasIssue=false → 不入库；</li>
-     *   <li>findings 空 + hasIssue=true + riskLevel 高于 INFO → 用整段 analysis
-     *       截取前若干字作占位 finding；</li>
-     *   <li>findings 空 + hasIssue=true + riskLevel == INFO → 不入库——
-     *       INFO 是"仅可疑、并无直接危害"档位，给它单造占位行本身就是在制造噪声。</li>
-     * </ol>
+     *   findings 非空 → 直接用；
+     *   findings 空 + hasIssue=false → 不入库；
+     *   findings 空 + hasIssue=true + riskLevel 高于 INFO → 用整段 analysis
+     *       截取前若干字作占位 finding；
+     *   findings 空 + hasIssue=true + riskLevel == INFO → 不入库——
+     *       INFO 是"仅可疑、并无直接危害"档位，给它单造占位行本身就是在制造噪声。
      */
-    public static List<Finding> resolveFindings(ExtractedFindings extracted, String analysis,
+    public static List<Finding> resolveFindings(String analysisId, ExtractedFindings extracted, String analysis,
                                                 String fallbackMethod, String fallbackUrl,
                                                 long capturedAtMillis, long analysisTimestamp) {
         if (!extracted.findings().isEmpty()) {
@@ -615,6 +602,7 @@ public final class AnalysisResponseParser {
             return List.of();
         }
         return List.of(Finding.placeholder(
+                analysisId,
                 truncateForPlaceholder(analysis),
                 extracted.riskLevel(),
                 fallbackMethod,
@@ -675,9 +663,9 @@ public final class AnalysisResponseParser {
     /**
      * 阶段 1 解析后的调度决策：是否需要阶段 2 + 选中的技能 + 阶段 1 的 analysis（兜底用）。
      *
-     * <p>{@link #unknownIds()} 是模型尝试挑但不在 enabled 列表里的 id 集合——
+     * {@link #unknownIds()} 是模型尝试挑但不在 enabled 列表里的 id 集合——
      * 非空时说明模型有明确选择意图但拼写错或与版本不匹配，由调用方决定是否打 warn 日志。
-     * 默认空（最常见的"模型主动收尾"或"模型成功挑出技能"两条路径都不会填它）。</p>
+     * 默认空（最常见的"模型主动收尾"或"模型成功挑出技能"两条路径都不会填它）。
      */
     public record SelectionResult(List<Skill> activeSkills, String analysis, boolean tookPhase2,
                                   List<String> unknownIds) {
@@ -707,9 +695,9 @@ public final class AnalysisResponseParser {
      * 阶段 1 解析尝试的"带失败原因"结果：成功时 {@link #selection} 非空、{@link #failureReason} 为 null；
      * 失败时 {@link #selection} 为 null、{@link #failureReason} 为可读错误描述。
      *
-     * <p>见 {@link #tryParseSelectionWithReason} 的方法注释——设计动机是让
+     * 见 {@link #tryParseSelectionWithReason} 的方法注释——设计动机是让
      * {@code TrafficAnalyzer} 在阶段 1 完全失败时能拿到失败原因决定走 fail-fast 还是
-     * 全量启用兜底，而不是只能"知道失败了但不知道为什么"。</p>
+     * 全量启用兜底，而不是只能"知道失败了但不知道为什么"。
      */
     public record ParseAttempt(ParsedSelection selection, String failureReason) {
         public static ParseAttempt success(ParsedSelection selection) {

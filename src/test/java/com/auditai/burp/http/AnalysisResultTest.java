@@ -18,7 +18,7 @@ final class AnalysisResultTest {
 
     @Test
     void successWithoutFindingsProducesEmptyList() {
-        AnalysisResult r = AnalysisResult.success(1000L, "GET", "http://x", 200, "ok", 50L);
+        AnalysisResult r = AnalysisResult.success("aid", 1000L, "GET", "http://x", 200, "ok", 50L);
         assertEquals(1000L, r.getTimestampMillis());
         assertEquals("GET", r.getMethod());
         assertEquals("http://x", r.getUrl());
@@ -32,16 +32,16 @@ final class AnalysisResultTest {
 
     @Test
     void successWithFindingsKeepsThem() {
-        List<Finding> findings = List.of(Finding.create("SQLi", 80, "high",
+        List<Finding> findings = List.of(Finding.create("aid", "SQLi", 80, "high",
                 "参数 id 存在注入", "GET", "http://x", 0L, 0L));
-        AnalysisResult r = AnalysisResult.success(0L, "GET", "http://x", 200, "ok", 0L, findings);
+        AnalysisResult r = AnalysisResult.success("aid", 0L, "GET", "http://x", 200, "ok", 0L, findings);
         assertEquals(1, r.getFindings().size());
         assertEquals("SQLi", r.getFindings().get(0).getType());
     }
 
     @Test
     void errorResultHasErrorMessage() {
-        AnalysisResult r = AnalysisResult.error(0L, "GET", "http://x", -1, "boom", 30L);
+        AnalysisResult r = AnalysisResult.error("aid", 0L, "GET", "http://x", -1, "boom", 30L);
         assertEquals("boom", r.getError());
         assertEquals("boom", r.getSummary(), "error 路径下 summary 与 error 同源（前端展示用 summary）");
         assertTrue(r.getFindings().isEmpty());
@@ -50,8 +50,8 @@ final class AnalysisResultTest {
     @Test
     void findingsListIsImmutable() {
         List<Finding> mutable = new ArrayList<>();
-        mutable.add(Finding.create("X", 50, "low", "d", "GET", "http://x", 0L, 0L));
-        AnalysisResult r = AnalysisResult.success(0L, "GET", "http://x", 200, "ok", 0L, mutable);
+        mutable.add(Finding.create("aid", "X", 50, "low", "d", "GET", "http://x", 0L, 0L));
+        AnalysisResult r = AnalysisResult.success("aid", 0L, "GET", "http://x", 200, "ok", 0L, mutable);
         // 调用方再改原列表，不应影响 AnalysisResult
         mutable.clear();
         assertEquals(1, r.getFindings().size());

@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
@@ -23,10 +24,10 @@ import java.util.function.Consumer;
 /**
  * "问题列表"页签背后的全局问题库。
  *
- * <p>每次分析完成的 Finding 合并进本 store，按时间升序对外暴露。
+ * 每次分析完成的 Finding 合并进本 store，按时间升序对外暴露。
  * 关联的完整报告 / HTTP 方法 / URL 缓存在 AnalysisContext 旁路表里。
  * 持久化策略参考 com.auditai.burp.history.AnalysisHistoryStore：紧凑 JSON 写到
- * {@code <sessionRoot>/findings/findings-index.json}，FIFO 上限 #DEFAULT_MAX_FINDINGS。</p>
+ * {@code <sessionRoot>/findings/findings-index.json}，FIFO 上限 #DEFAULT_MAX_FINDINGS。
  */
 public final class FindingStore implements AutoCloseable {
 
@@ -36,9 +37,9 @@ public final class FindingStore implements AutoCloseable {
     /**
      * 默认最大内存 context 数：避免 request/response 字节把内存吃爆。
      *
-     * <p>context 被淘汰后，对应 finding 调 #contextFor 时回退为"兜底 context"
+     * context 被淘汰后，对应 finding 调 #contextFor 时回退为"兜底 context"
      * （用 finding 自身字段构造，无 request/response 字节），UI 仍可经
-     * {@code AnalysisHistoryStore} 反查路径拿到原文。</p>
+     * {@code AnalysisHistoryStore} 反查路径拿到原文。
      */
     static final int DEFAULT_MAX_CONTEXTS = 200;
 
@@ -55,12 +56,16 @@ public final class FindingStore implements AutoCloseable {
      * finding 库：LinkedHashMap 天然按插入顺序迭代。所有读写经 #lock 串行。
      */
     private final LinkedHashMap<String, Finding> findings = new LinkedHashMap<>();
+    /** 维护 findings 的 FIFO 插入顺序,用于按最旧淘汰。 */
+    private final LinkedHashSet<String> findingIdsInOrder = new LinkedHashSet<>();
+    /** analysisId → 同一分析的所有 finding；与 Finding.findingId 全局唯一正交。 */
+    private final LinkedHashMap<String, List<Finding>> findingsByAnalysisId = new LinkedHashMap<>();
     /**
-     * 一次完整分析的上下文：key = AnalysisResult#getTimestampMillis()。
+     * 一次完整分析的上下文：key = {@code AnalysisResult.getAnalysisId()}。
      * 完整报告 / HTTP method / URL / 状态码 / 关联 requestId 在此共享。
-     * 同 ts 二次入库时 {@code remove + put} 把它移到末尾。
+     * 同 id 二次入库时 {@code remove + put} 把它移到末尾。
      */
-    private final LinkedHashMap<Long, AnalysisContext> contexts = new LinkedHashMap<>();
+    private final LinkedHashMap<String, AnalysisContext> contexts = new LinkedHashMap<>();
     private final List<Consumer<Void>> listeners = new CopyOnWriteArrayList<>();
     private final Object lock = new Object();
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
@@ -98,15 +103,15 @@ public final class FindingStore implements AutoCloseable {
     /**
      * 把一次分析的 findings 合并到全局库。
      *
-     * <p>同一次分析内的多条 finding 分别独立入库（每条都有唯一 findingId）；
-     * 重复添加（findingId 已存在）会被静默忽略——正常流程里 findingId 不会冲突。</p>
+     * 同一次分析内的多条 finding 分别独立入库（每条都有唯一 findingId）；
+     * 重复添加（findingId 已存在）会被静默忽略——正常流程里 findingId 不会冲突。
      *
-     * <p>同时把该次分析的 AnalysisResult 缓存到 AnalysisContext，
-     * 供下方详情页签读取"完整分析报告"和"关联 requestId"。</p>
+     * 同时把该次分析的 AnalysisResult 缓存到 AnalysisContext，
+     * 供下方详情页签读取"完整分析报告"和"关联 requestId"。
      *
-     * <p><b>request / response 字节：</b>该方法不携带原文。AnalysisContext 里
+     * request / response 字节：该方法不携带原文。AnalysisContext 里
      * 这两个字段会是 null，UI 选中 finding 时会回退到 {@code AnalysisHistoryStore} 反查。
-     * 需要"原文直达"时调 #addFindings(AnalysisResult, byte[], byte[])。</p>
+     * 需要"原文直达"时调 #addFindings(AnalysisResult, byte[], byte[])。
      *
      * @param result 来自 TrafficAnalyzer 的分析结果。
      */
@@ -117,12 +122,12 @@ public final class FindingStore implements AutoCloseable {
     /**
      * 把一次分析的 findings 合并到全局库，并缓存分析时使用的原始 request / response 字节。
      *
-     * <p>request / response 字节仅存内存（不持久化到 findings-index.json），原因是：
+     * request / response 字节仅存内存（不持久化到 findings-index.json），原因是：
      * 报文可能很大，且 AnalysisHistoryStore 已经按需持久化完整报文；问题库磁盘只保留
-     * finding 元数据 + summary。重启后这两字段会丢失，UI 选中时回退到 trafficStore 反查。</p>
+     * finding 元数据 + summary。重启后这两字段会丢失，UI 选中时回退到 trafficStore 反查。
      *
-     * <p>这一路径让"Repeater 主动发起的报文"等不在 Proxy 历史里的请求也能在下方
-     * 报文页签完整展示。</p>
+     * 这一路径让"Repeater 主动发起的报文"等不在 Proxy 历史里的请求也能在下方
+     * 报文页签完整展示。
      *
      * @param result        来自 TrafficAnalyzer 的分析结果。
      * @param requestBytes  分析时使用的原始请求字节；可为 null（不携带）。
@@ -138,18 +143,18 @@ public final class FindingStore implements AutoCloseable {
                 || result.getUrl() != null;
         boolean changed = false;
         synchronized (lock) {
+            String analysisId = result.getAnalysisId();
             // 1. 缓存分析上下文（即便没有 findings 也存，UI 可能需要查看"无问题"的报告）
             if (hasContext) {
-                long ts = result.getTimestampMillis();
-                AnalysisContext newCtx = new AnalysisContext(ts, result.getMethod(),
-                        result.getUrl(), result.getStatusCode(), result.getSummary(),
-                        requestBytes, responseBytes);
-                if (contexts.containsKey(ts)) {
-                    // 已存在该 timestamp 的 context：remove + put 把 LinkedHashMap 中的
+                AnalysisContext newCtx = new AnalysisContext(analysisId, result.getTimestampMillis(),
+                        result.getMethod(), result.getUrl(), result.getStatusCode(),
+                        result.getSummary(), requestBytes, responseBytes);
+                if (contexts.containsKey(analysisId)) {
+                    // 已存在该 analysisId 的 context：remove + put 把 LinkedHashMap 中的
                     // 条目重新移动到末尾（"刷新时同步更新插入顺序末尾"语义）。
-                    contexts.remove(ts);
+                    contexts.remove(analysisId);
                 }
-                contexts.put(ts, newCtx);
+                contexts.put(analysisId, newCtx);
                 evictContextsIfNeeded();
             }
             // 2. 合并 findings
@@ -160,6 +165,14 @@ public final class FindingStore implements AutoCloseable {
                     }
                     // putIfAbsent 语义保留：findingId 已存在时静默忽略。
                     if (findings.putIfAbsent(f.getFindingId(), f) == null) {
+                        findingIdsInOrder.add(f.getFindingId());
+                        // 同步建 analysisId → finding 桶：首次见到该 analysisId 时创建,后续 finding 复用同一 list。
+                        List<Finding> bucket = findingsByAnalysisId.get(analysisId);
+                        if (bucket == null) {
+                            bucket = new ArrayList<>();
+                            findingsByAnalysisId.put(analysisId, bucket);
+                        }
+                        bucket.add(f);
                         changed = true;
                     }
                 }
@@ -179,9 +192,9 @@ public final class FindingStore implements AutoCloseable {
      * com.auditai.burp.history.AnalysisHistoryStore#list() 的"新条目滚到底部"
      * 行为保持一致，UI 表格直接按返回顺序填模型行即可。
      *
-     * <p>List#sort(Comparator) 是 stable sort：当多条 finding 的
+     * List#sort(Comparator) 是 stable sort：当多条 finding 的
      * {@code capturedAtMillis} 相同时，退化为 LinkedHashMap 的插入顺序
-     * （即 #addFindings 的到达先后）。</p>
+     * （即 #addFindings 的到达先后）。
      */
     public List<Finding> list() {
         List<Finding> result;
@@ -204,8 +217,8 @@ public final class FindingStore implements AutoCloseable {
     /**
      * 返回指定 finding 所属分析的完整上下文（报告、method、url、状态码）。
      *
-     * <p>找不到对应分析时（极少见：finding 是磁盘恢复出来的、但 context 被清理），
-     * 返回仅含 findingId 占位的最小 context，永不返回 null。</p>
+     * 找不到对应分析时（极少见：finding 是磁盘恢复出来的、但 context 被清理），
+     * 返回仅含 findingId 占位的最小 context，永不返回 null。
      */
     public AnalysisContext contextFor(Finding finding) {
         if (finding == null) {
@@ -216,28 +229,59 @@ public final class FindingStore implements AutoCloseable {
             // 必须与写侧（addFindings / remove / clear / evict*）共用同一把锁：
             // contexts 是 LinkedHashMap，本方法由 EDT 在"选中 finding"时调用，
             // 而写侧在分析线程上做结构性修改（put/remove），无锁读会读到撕裂状态。
-            ctx = contexts.get(finding.getAnalysisTimestamp());
+            ctx = contexts.get(finding.getAnalysisId());
         }
         if (ctx != null) {
             return ctx;
         }
         // 兜底：用 finding 自身字段构造一个最小 context，确保 UI 不会 NPE
-        return new AnalysisContext(finding.getAnalysisTimestamp(), finding.getMethod(),
-                finding.getUrl(), -1, "");
+        return new AnalysisContext(finding.getAnalysisId(), finding.getCapturedAtMillis(),
+                finding.getMethod(), finding.getUrl(), -1, "");
+    }
+
+    /**
+     * 按 analysisId 取本次分析的所有 finding；未命中返回空列表(非 null)。
+     * 返回的 list 是内部引用副本,调用方可放心遍历或修改。
+     */
+    public List<Finding> findingsByAnalysisId(String analysisId) {
+        if (analysisId == null || analysisId.isBlank()) {
+            return List.of();
+        }
+        synchronized (lock) {
+            List<Finding> bucket = findingsByAnalysisId.get(analysisId);
+            if (bucket == null || bucket.isEmpty()) {
+                return List.of();
+            }
+            return new ArrayList<>(bucket);
+        }
+    }
+
+    /** 按 analysisId 取完整分析上下文；找不到返回 AnalysisContext.empty()（永不 null）。 */
+    public AnalysisContext contextForAnalysisId(String analysisId) {
+        if (analysisId == null || analysisId.isBlank()) {
+            return AnalysisContext.empty();
+        }
+        synchronized (lock) {
+            AnalysisContext ctx = contexts.get(analysisId);
+            if (ctx != null) {
+                return ctx;
+            }
+        }
+        return AnalysisContext.empty();
     }
 
     /**
      * 删除单条问题。
      *
-     * <p>按 {@code findingId} 精确删除（findingId 是 finding 的全局唯一 ID，由
+     * 按 {@code findingId} 精确删除（findingId 是 finding 的全局唯一 ID，由
      * Finding#create / Finding#placeholder(String, Severity, String, String, long, long)
      * 工厂方法随机生成）；
      * 删除后若该 finding 所属的 {@code analysisTimestamp} 没有任何其它 finding
      * 引用，则把对应的 AnalysisContext 也一并清理掉（避免 context 表
-     * 长期持有已被删除 finding 的 request/response 字节）。</p>
+     * 长期持有已被删除 finding 的 request/response 字节）。
      *
-     * <p>未找到指定 {@code findingId} 时静默忽略；调用方无需额外判空。
-     * 删除成功后同步刷新磁盘索引并通知监听器。</p>
+     * 未找到指定 {@code findingId} 时静默忽略；调用方无需额外判空。
+     * 删除成功后同步刷新磁盘索引并通知监听器。
      *
      * @param findingId 要删除的问题 ID；为 null / 空白 / 不存在时不做任何操作。
      * @return 是否实际执行了删除（用于 UI 上区分"删掉了" vs "本来就没有"）。
@@ -251,17 +295,26 @@ public final class FindingStore implements AutoCloseable {
             if (existing == null) {
                 return false;
             }
-            // 如果这条 finding 是它所在 analysisTimestamp 的最后一条引用，回收 context
-            long ts = existing.getAnalysisTimestamp();
+            findingIdsInOrder.remove(findingId);
+            String aid = existing.getAnalysisId();
+            // 同步清理 analysisId → finding 索引桶
+            List<Finding> bucket = findingsByAnalysisId.get(aid);
+            if (bucket != null) {
+                bucket.remove(existing);
+                if (bucket.isEmpty()) {
+                    findingsByAnalysisId.remove(aid);
+                }
+            }
+            // 如果这条 finding 是它所在 analysisId 的最后一条引用，回收 context
             boolean stillReferenced = false;
             for (Finding f : findings.values()) {
-                if (f.getAnalysisTimestamp() == ts) {
+                if (aid.equals(f.getAnalysisId())) {
                     stillReferenced = true;
                     break;
                 }
             }
             if (!stillReferenced) {
-                contexts.remove(ts);
+                contexts.remove(aid);
             }
             persistIndex();
         }
@@ -276,9 +329,11 @@ public final class FindingStore implements AutoCloseable {
     public void clear() {
         boolean changed;
         synchronized (lock) {
-            changed = !findings.isEmpty() || !contexts.isEmpty();
+            changed = !findings.isEmpty() || !contexts.isEmpty() || !findingsByAnalysisId.isEmpty();
             findings.clear();
             contexts.clear();
+            findingsByAnalysisId.clear();
+            findingIdsInOrder.clear();
             if (changed) {
                 persistIndex();
             }
@@ -298,8 +353,8 @@ public final class FindingStore implements AutoCloseable {
     /**
      * 释放内存索引；磁盘文件保留，重启后自动恢复。
      *
-     * <p>本 store 没有后台线程或文件句柄等需要显式清理的资源（内存索引随 GC 回收），
-     * close 仅用于满足 AutoCloseable 契约，无实际动作。</p>
+     * 本 store 没有后台线程或文件句柄等需要显式清理的资源（内存索引随 GC 回收），
+     * close 仅用于满足 AutoCloseable 契约，无实际动作。
      */
     @Override
     public void close() {
@@ -343,14 +398,14 @@ public final class FindingStore implements AutoCloseable {
     /**
      * 超过 #maxContexts 上限时按插入顺序淘汰最旧 context。
      *
-     * <p><b>不连带删除 finding</b> —— finding 仍按 #evictIfNeeded 控制的上限
+     * 不连带删除 finding —— finding 仍按 #evictIfNeeded 控制的上限
      * 保留元数据 + summary。被淘汰的 context 对应 finding 调 #contextFor
      * 时会拿到"兜底 context"（用 finding 自身字段构造，无 request/response 字节），
-     * UI 自动回退到 {@code AnalysisHistoryStore} 反查路径。</p>
+     * UI 自动回退到 {@code AnalysisHistoryStore} 反查路径。
      */
     private void evictContextsIfNeeded() {
         while (contexts.size() > maxContexts) {
-            Long oldest = contexts.isEmpty() ? null : contexts.keySet().iterator().next();
+            String oldest = contexts.isEmpty() ? null : contexts.keySet().iterator().next();
             if (oldest == null) {
                 return;
             }
@@ -363,16 +418,25 @@ public final class FindingStore implements AutoCloseable {
      */
     private void evictIfNeeded() {
         while (findings.size() > maxFindings) {
-            String oldest = findings.isEmpty() ? null : findings.keySet().iterator().next();
+            String oldest = findingIdsInOrder.isEmpty() ? null : findingIdsInOrder.iterator().next();
             if (oldest == null) {
                 return;
             }
             Finding removed = findings.remove(oldest);
+            findingIdsInOrder.remove(oldest);
             if (removed != null) {
-                long ts = removed.getAnalysisTimestamp();
-                // 只在没有任何 finding 引用该 timestamp 时才清掉 context
-                if (findings.values().stream().noneMatch(f -> f.getAnalysisTimestamp() == ts)) {
-                    contexts.remove(ts);
+                String aid = removed.getAnalysisId();
+                // 同步清理 analysisId 索引桶
+                List<Finding> bucket = findingsByAnalysisId.get(aid);
+                if (bucket != null) {
+                    bucket.remove(removed);
+                    if (bucket.isEmpty()) {
+                        findingsByAnalysisId.remove(aid);
+                    }
+                }
+                // 只在没有任何 finding 引用该 analysisId 时才清掉 context
+                if (findings.values().stream().noneMatch(f -> aid.equals(f.getAnalysisId()))) {
+                    contexts.remove(aid);
                 }
             }
         }
@@ -405,13 +469,16 @@ public final class FindingStore implements AutoCloseable {
                     JsonObject c = el.getAsJsonObject();
                     long ts = c.has("timestampMillis") && c.get("timestampMillis").isJsonPrimitive()
                             ? c.get("timestampMillis").getAsLong() : 0L;
+                    // 老 findings-index.json 的 context 缺 analysisId 字段时兜底成空串,不阻塞加载。
+                    String aid = c.has("analysisId") && c.get("analysisId").isJsonPrimitive()
+                            ? c.get("analysisId").getAsString() : "";
                     String method = readString(c, "method");
                     String url = readString(c, "url");
                     int status = c.has("statusCode") && c.get("statusCode").isJsonPrimitive()
                             ? c.get("statusCode").getAsInt() : -1;
                     String summary = readString(c, "summary");
-                    if (ts > 0) {
-                        contexts.put(ts, new AnalysisContext(ts, method, url, status, summary));
+                    if (ts > 0 || !aid.isEmpty()) {
+                        contexts.put(aid, new AnalysisContext(aid, ts, method, url, status, summary));
                     }
                 }
             }
@@ -426,6 +493,15 @@ public final class FindingStore implements AutoCloseable {
                     Finding parsed = deserializeFinding(el.getAsJsonObject());
                     if (parsed != null) {
                         findings.put(parsed.getFindingId(), parsed);
+                        findingIdsInOrder.add(parsed.getFindingId());
+                        // 同步重建 analysisId → finding 索引。
+                        String aid = parsed.getAnalysisId();
+                        List<Finding> bucket = findingsByAnalysisId.get(aid);
+                        if (bucket == null) {
+                            bucket = new ArrayList<>();
+                            findingsByAnalysisId.put(aid, bucket);
+                        }
+                        bucket.add(parsed);
                     }
                 }
             }
@@ -436,6 +512,9 @@ public final class FindingStore implements AutoCloseable {
         try {
             String id = obj.has("findingId") && obj.get("findingId").isJsonPrimitive()
                     ? obj.get("findingId").getAsString() : null;
+            // analysisId:老 findings-index.json 缺该字段时为 null,由 Finding.restore 内部兜底 UUID。
+            String analysisId = obj.has("analysisId") && obj.get("analysisId").isJsonPrimitive()
+                    ? obj.get("analysisId").getAsString() : null;
             String method = readString(obj, "method");
             String url = readString(obj, "url");
             String type = readString(obj, "type");
@@ -455,7 +534,7 @@ public final class FindingStore implements AutoCloseable {
                 description = readString(obj, "title");
             }
             // 直接走 restore() 工厂把 placeholder 标记也带回去，restore 内部会处理 findingId。
-            return Finding.restore(id, method, url, type, confidence, severity, description,
+            return Finding.restore(id, analysisId, method, url, type, confidence, severity, description,
                     capturedAt, analysisTs, placeholder);
         } catch (RuntimeException e) {
             return null;
@@ -504,6 +583,7 @@ public final class FindingStore implements AutoCloseable {
     private static JsonObject serializeFinding(Finding f) {
         JsonObject obj = new JsonObject();
         obj.addProperty("findingId", f.getFindingId());
+        obj.addProperty("analysisId", f.getAnalysisId());
         obj.addProperty("method", f.getMethod());
         obj.addProperty("url", f.getUrl());
         obj.addProperty("type", f.getType());
@@ -518,6 +598,7 @@ public final class FindingStore implements AutoCloseable {
 
     private static JsonObject serializeContext(AnalysisContext ctx) {
         JsonObject obj = new JsonObject();
+        obj.addProperty("analysisId", ctx.analysisId == null ? "" : ctx.analysisId);
         obj.addProperty("timestampMillis", ctx.timestampMillis);
         obj.addProperty("method", ctx.method == null ? "" : ctx.method);
         obj.addProperty("url", ctx.url == null ? "" : ctx.url);
@@ -530,13 +611,14 @@ public final class FindingStore implements AutoCloseable {
      * 一次完整分析（AnalysisResult）的上下文：仅存"按 finding 共享的"信息，
      * 避免每条 finding 重复存同一份 summary。
      *
-     * <p><b>request / response 字节：</b>仅内存持有，<b>不</b>进磁盘。原因：报文可能很大，
+     * request / response 字节：仅内存持有，不进磁盘。原因：报文可能很大，
      * 且 HTTP history（AnalysisHistoryStore）已经按需持久化完整报文；问题库磁盘上
      * 只需要保留 finding 元数据 + summary，重启后让 UI 回退到 AnalysisHistoryStore
      * 反查。重启后内存里的字节就丢失，#getRequestBytes() /
-     * #getResponseBytes() 会返回 null。</p>
+     * #getResponseBytes() 会返回 null。
      */
     public static final class AnalysisContext {
+        private final String analysisId;
         private final long timestampMillis;
         private final String method;
         private final String url;
@@ -546,13 +628,15 @@ public final class FindingStore implements AutoCloseable {
         private final byte[] responseBytes;
 
         /** 磁盘恢复用：request/response 字节为 null。 */
-        AnalysisContext(long timestampMillis, String method, String url, int statusCode, String summary) {
-            this(timestampMillis, method, url, statusCode, summary, null, null);
+        AnalysisContext(String analysisId, long timestampMillis, String method, String url, int statusCode,
+                        String summary) {
+            this(analysisId, timestampMillis, method, url, statusCode, summary, null, null);
         }
 
         /** 完整构造：request/response 字节由调用方传入；为 null 表示"未提供"。 */
-        AnalysisContext(long timestampMillis, String method, String url, int statusCode,
+        AnalysisContext(String analysisId, long timestampMillis, String method, String url, int statusCode,
                         String summary, byte[] requestBytes, byte[] responseBytes) {
+            this.analysisId = analysisId == null ? "" : analysisId;
             this.timestampMillis = timestampMillis;
             this.method = method == null ? "" : method;
             this.url = url == null ? "" : url;
@@ -563,7 +647,12 @@ public final class FindingStore implements AutoCloseable {
         }
 
         static AnalysisContext empty() {
-            return new AnalysisContext(0L, "", "", -1, "");
+            return new AnalysisContext("", 0L, "", "", -1, "");
+        }
+
+        /** 本次分析的共享 ID,与 AnalysisResult.getAnalysisId() / Finding.getAnalysisId() 一致。 */
+        public String getAnalysisId() {
+            return analysisId;
         }
 
         public long getTimestampMillis() {
@@ -588,7 +677,7 @@ public final class FindingStore implements AutoCloseable {
 
         /**
          * 分析时使用的原始请求字节；可能为 null（来自磁盘恢复 / 调用方未提供）。
-         * 返回的数组是 store 内部持有的一份拷贝（或原引用），调用方<b>不应修改</b>。
+         * 返回的数组是 store 内部持有的一份拷贝（或原引用），调用方不应修改。
          */
         public byte[] getRequestBytes() {
             return requestBytes;

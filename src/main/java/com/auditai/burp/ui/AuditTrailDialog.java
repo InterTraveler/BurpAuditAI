@@ -27,20 +27,18 @@ import java.util.function.Consumer;
 /**
  * "链路追踪"窗口：以独立 JFrame 展示一条历史记录对应的 audit-trail XML。
  *
- * <b>为什么用 {@code JFrame} 而不是 {@code JDialog}</b>：{@code JDialog} 没有原生
+ * 为什么用 {@code JFrame} 而不是 {@code JDialog}：{@code JDialog} 没有原生
  * "最大化"按钮（{@code Frame.MAXIMIZED_BOTH} 那一套 API 在 JDialog 上没有），用户期望
  * "右上角关闭按钮的左边"那个标准最大化按钮，只有 JFrame 自带。JFrame 本身非模态
  * （modal 是 Dialog 概念），满足"非模态弹出新窗口"的需求。
  *
- * <b>数据来源</b>：AnalysisHistoryEntry.getAuditTrailFile()；每次打开都通过
- * WorkflowLogger.readTrail(Path) 实时解析，<b>不</b>做缓存，保证看到的就是磁盘上
+ * 数据来源：AnalysisHistoryEntry.getAuditTrailFile()；每次打开都通过
+ * WorkflowLogger.readTrail(Path) 实时解析，不做缓存，保证看到的就是磁盘上
  * 最新的轨迹内容。
  *
- * <b>渲染规则</b>：从 XML 中提取的每条 TrailMessage 按其 Source 着色：
- * <ul>
- *   <li>agent（请求侧）→ 宝蓝色 {@code #4169E1}；</li>
- *   <li>ai（响应/错误侧）→ 轻珊瑚 {@code #F08080}；</li>
- * </ul>
+ * 渲染规则：从 XML 中提取的每条 TrailMessage 按其 Source 着色：
+ *   agent（请求侧）→ 宝蓝色 {@code #4169E1}；
+ *   ai（响应/错误侧）→ 轻珊瑚 {@code #F08080}；
  */
 public final class AuditTrailDialog {
 
@@ -167,17 +165,15 @@ public final class AuditTrailDialog {
     /**
      * 把一条 message 拼成 HTML 片段：[role] 标签 + content 文本。
      *
-     * <b>换行策略（关键：不用 {@code <pre>}）</b>：{@code <pre>} 在 HTMLEditorKit
+     * 换行策略（关键：不用 {@code }）：{@code } 在 HTMLEditorKit
      * 里有顽固的 nowrap 行为，即便 CSS 设了 {@code white-space: pre-wrap} 也经常
-     * 不生效——长 URL / JSON 仍会出现水平滚动条。本方案改用 {@code <div>} + 手动
-     * 把 {@code \n} 替换为 {@code <br>}，再叠加多重断行 CSS：
-     * <ul>
-     *   <li>{@code word-wrap: break-word} 兼容老旧 LAF；</li>
-     *   <li>{@code word-break: break-all} 强制在任意字符间断行，覆盖 base64 /
-     *       长 URL / hash 等"无空格的长字符串"场景；</li>
-     *   <li>{@code overflow-wrap: break-word} 双保险；</li>
-     *   <li>{@code white-space: normal} 显式覆盖任何继承的 nowrap 行为。</li>
-     * </ul>
+     * 不生效——长 URL / JSON 仍会出现水平滚动条。本方案改用 {@code } + 手动
+     * 把 {@code \n} 替换为 {@code }，再叠加多重断行 CSS：
+     *   {@code word-wrap: break-word} 兼容老旧 LAF；
+     *   {@code word-break: break-all} 强制在任意字符间断行，覆盖 base64 /
+     *       长 URL / hash 等"无空格的长字符串"场景；
+     *   {@code overflow-wrap: break-word} 双保险；
+     *   {@code white-space: normal} 显式覆盖任何继承的 nowrap 行为。
      */
     private static void appendMessageHtml(StringBuilder html, TrailMessage m) {
         String color = m.source() == Source.AI ? COLOR_AI : COLOR_AGENT;

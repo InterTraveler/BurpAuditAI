@@ -12,10 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 
 /**
  * {@link RiskLevel} 单元测试：
- * <ul>
- *   <li>枚举常量值稳定（rank/label 与 Severity 一一对应 + NONE 兜底）；</li>
- *   <li>{@link RiskLevel#derive} 从 findings 推导最高严重度，失败/无 findings 时为 NONE。</li>
- * </ul>
+ *   枚举常量值稳定（rank/label 与 Severity 一一对应 + NONE 兜底）；
+ *   {@link RiskLevel#derive} 从 findings 推导最高严重度，失败/无 findings 时为 NONE。
  */
 class RiskLevelTest {
 
@@ -34,51 +32,51 @@ class RiskLevelTest {
 
     @Test
     void derive_errorResult_returnsNone() {
-        AnalysisResult result = AnalysisResult.error(0L, "GET", "http://x", 200, "boom", 100L);
+        AnalysisResult result = AnalysisResult.error("aid", 0L, "GET", "http://x", 200, "boom", 100L);
         assertSame(RiskLevel.NONE, RiskLevel.derive(result));
     }
 
     @Test
     void derive_emptyFindings_returnsNone() {
-        AnalysisResult result = AnalysisResult.success(0L, "GET", "http://x", 200, "ok", 100L);
+        AnalysisResult result = AnalysisResult.success("aid", 0L, "GET", "http://x", 200, "ok", 100L);
         assertSame(RiskLevel.NONE, RiskLevel.derive(result));
     }
 
     @Test
     void derive_blankSummary_returnsNone() {
-        Finding f = Finding.create("x", 80, "high", "desc", "GET", "http://x", 0L, 0L);
-        AnalysisResult result = AnalysisResult.success(0L, "GET", "http://x", 200, "  ", 100L,
+        Finding f = Finding.create("aid", "x", 80, "high", "desc", "GET", "http://x", 0L, 0L);
+        AnalysisResult result = AnalysisResult.success("aid", 0L, "GET", "http://x", 200, "  ", 100L,
                 List.of(f));
         assertSame(RiskLevel.NONE, RiskLevel.derive(result));
     }
 
     @Test
     void derive_singleFinding_returnsThatRisk() {
-        Finding f = Finding.create("x", 80, "high", "desc", "GET", "http://x", 0L, 0L);
-        AnalysisResult result = AnalysisResult.success(0L, "GET", "http://x", 200, "ok", 100L,
+        Finding f = Finding.create("aid", "x", 80, "high", "desc", "GET", "http://x", 0L, 0L);
+        AnalysisResult result = AnalysisResult.success("aid", 0L, "GET", "http://x", 200, "ok", 100L,
                 List.of(f));
         assertSame(RiskLevel.HIGH, RiskLevel.derive(result));
     }
 
     @Test
     void derive_multipleFindings_picksHighestRank() {
-        Finding low = Finding.create("a", 50, "low", "d1", "GET", "http://x", 0L, 0L);
-        Finding high = Finding.create("b", 90, "high", "d2", "GET", "http://x", 0L, 0L);
-        Finding critical = Finding.create("c", 99, "critical", "d3", "GET", "http://x", 0L, 0L);
-        AnalysisResult result = AnalysisResult.success(0L, "GET", "http://x", 200, "ok", 100L,
+        Finding low = Finding.create("aid", "a", 50, "low", "d1", "GET", "http://x", 0L, 0L);
+        Finding high = Finding.create("aid", "b", 90, "high", "d2", "GET", "http://x", 0L, 0L);
+        Finding critical = Finding.create("aid", "c", 99, "critical", "d3", "GET", "http://x", 0L, 0L);
+        AnalysisResult result = AnalysisResult.success("aid", 0L, "GET", "http://x", 200, "ok", 100L,
                 List.of(low, high, critical));
         assertSame(RiskLevel.CRITICAL, RiskLevel.derive(result));
     }
 
     @Test
     void derive_nullElementsInFindings_areSkipped() {
-        Finding high = Finding.create("a", 90, "high", "d1", "GET", "http://x", 0L, 0L);
+        Finding high = Finding.create("aid", "a", 90, "high", "d1", "GET", "http://x", 0L, 0L);
         // 含 null 时跳过（不抛 NPE），结果取非 null 中最高
         java.util.List<Finding> mixed = new java.util.ArrayList<>();
         mixed.add(null);
         mixed.add(high);
         mixed.add(null);
-        AnalysisResult result = AnalysisResult.success(0L, "GET", "http://x", 200, "ok", 100L,
+        AnalysisResult result = AnalysisResult.success("aid", 0L, "GET", "http://x", 200, "ok", 100L,
                 java.util.Collections.unmodifiableList(mixed));
         assertSame(RiskLevel.HIGH, RiskLevel.derive(result));
     }

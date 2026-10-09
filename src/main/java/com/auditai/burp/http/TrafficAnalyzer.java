@@ -33,39 +33,33 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
- * 流量分析编排器：<b>技能驱动的两阶段调用</b>。
+ * 流量分析编排器：技能驱动的两阶段调用。
  *
- * <p>整体流程（业内做法 = Anthropic Skills / OpenAI Function Calling / MCP 通用模式）：</p>
- * <ul>
- *   <li><b>无任何技能启用</b>：单次模型调用直接出结论（最便宜的路径）；</li>
- *   <li><b>有技能启用</b>：两阶段调用——
- *     <ol>
- *       <li>阶段 1（技能选择）：system 段展示"可选技能目录"（id + 名称 + 用途），
+ * 整体流程（业内做法 = Anthropic Skills / OpenAI Function Calling / MCP 通用模式）：
+ *   无任何技能启用：单次模型调用直接出结论（最便宜的路径）；
+ *   有技能启用：两阶段调用——
+ *       阶段 1（技能选择）：system 段展示"可选技能目录"（id + 名称 + 用途），
  *           加上脱敏的报文 user 段。模型返回 {@code {"active_skill_ids": [...], "analysis": "..."}}。
- *           模型可主动选 0 个或多个技能；若 0 个且 analysis 非空则直接收尾，跳过阶段 2；</li>
- *       <li>阶段 2（最终分析）：把模型选中的技能 prompt 拼到 system 段、userContext 拼到
- *           user 段，再次调模型，拿到最终 analysis。</li>
- *     </ol>
- *   </li>
- * </ul>
+ *           模型可主动选 0 个或多个技能；若 0 个且 analysis 非空则直接收尾，跳过阶段 2；
+ *       阶段 2（最终分析）：把模型选中的技能 prompt 拼到 system 段、userContext 拼到
+ *           user 段，再次调模型，拿到最终 analysis。
  *
- * <p>关键设计：</p>
- * <ul>
- *   <li><b>异步</b>：AI 调用是秒级慢操作，不能阻塞 Swing 事件线程（EDT），
- *       所有分析任务统一提交到单线程执行器按到达顺序串行执行；</li>
- *   <li><b>逐任务可取消</b>：{@link #analyzeAsync} 返回 {@link AnalysisTask} 句柄，
+ * 关键设计：
+ *   异步：AI 调用是秒级慢操作，不能阻塞 Swing 事件线程（EDT），
+ *       所有分析任务统一提交到单线程执行器按到达顺序串行执行；
+ *   逐任务可取消：{@link #analyzeAsync} 返回 {@link AnalysisTask} 句柄，
  *       每个页签持有自己的句柄——排队中的任务置取消标志直接放弃，
- *       执行中的任务中断底层 HTTP 请求（{@link CancellableAiCall#cancel()}）；</li>
- *   <li><b>模型有选择权</b>：所有启用技能作为"候选"出现在阶段 1 的 system 段，
+ *       执行中的任务中断底层 HTTP 请求（{@link CancellableAiCall#cancel()}）；
+ *   模型有选择权：所有启用技能作为"候选"出现在阶段 1 的 system 段，
  *       但 user 段不会预填任何技能的 userContext（多报文协同的历史摘要等）——
- *       避免"硬塞信息给模型"导致的 token 浪费与决策权丢失；</li>
- *   <li><b>降级链</b>：阶段 1 JSON 解析失败 → 全量启用所有候选技能；阶段 2 失败 → 用阶段 1
- *       的 analysis 兜底（若有），否则整体失败；</li>
- *   <li>守护线程：Burp 退出时不会因本插件的线程被阻塞而无法退出。</li>
- * </ul>
+ *       避免"硬塞信息给模型"导致的 token 浪费与决策权丢失；
+ *   降级链：阶段 1 JSON 解析失败 → 全量启用所有候选技能；阶段 2 失败 → 用阶段 1
+ *       的 analysis 兜底（若有），否则整体失败；
+ *   守护线程：Burp 退出时不会因本插件的线程被阻塞而无法退出。
  */
 public final class TrafficAnalyzer {
 
@@ -73,12 +67,12 @@ public final class TrafficAnalyzer {
      * 开发期调试日志开关（运行时动态读取 JVM 系统属性，测试可在 {@code @BeforeAll}
      * 打开、{@code @AfterAll} 关闭，而无需重编译或重启 JVM）。
      *
-     * <p>开启时把与模型交互的全部内容（系统提示词、用户提示词、模型原始 JSON、
+     * 开启时把与模型交互的全部内容（系统提示词、用户提示词、模型原始 JSON、
      * 解析过程、降级路径等）打印到 Burp 的 Extender Output 窗口，
-     * 仅用于开发阶段核对"插件到底把什么内容发给了大模型 / 大模型回了什么"。</p>
+     * 仅用于开发阶段核对"插件到底把什么内容发给了大模型 / 大模型回了什么"。
      *
-     * <p>默认关闭（避免把完整报文留在用户的 Burp 日志中）；开发期可通过 JVM 系统属性
-     * {@code -Dauditai.debug.prompt=true} 临时开启，无需重新编译。</p>
+     * 默认关闭（避免把完整报文留在用户的 Burp 日志中）；开发期可通过 JVM 系统属性
+     * {@code -Dauditai.debug.prompt=true} 临时开启，无需重新编译。
      */
     private static boolean debugPromptEnabled() {
         return Boolean.getBoolean("auditai.debug.prompt");
@@ -100,12 +94,12 @@ public final class TrafficAnalyzer {
     /**
      * 是否输出"开始分析"这类每条分析一条的 info 日志。
      *
-     * <p>手动分析（UI 触发）和被动分析都默认 true——让用户在 Output 看到每条分析的
+     * 手动分析（UI 触发）和被动分析都默认 true——让用户在 Output 看到每条分析的
      * 进度边界（【开始分析：】/【分析完成：】）。中间步骤（phase 切换、phase 1 决策、
      * 工具循环次数等）走 debug 通道,默认不打印,避免被动分析时刷屏——
      * 开发期开 -Dauditai.debug.prompt=true 即可一键全部可见。
      * 刷屏风险由调用方按需控制：失败路径仍由 {@code FailureLogThrottle} 节流（30s 一条完整
-     * + 合并计数），错误日志（logToError）不受此开关影响。</p>
+     * + 合并计数），错误日志（logToError）不受此开关影响。
      */
     private final boolean logInfoEnabled;
 
@@ -215,7 +209,7 @@ public final class TrafficAnalyzer {
             error("分析任务被拒绝（执行器队列已满或已关闭）：" + request.method() + " " + request.url(), e);
             if (onResult != null) {
                 long start = System.currentTimeMillis();
-                onResult.accept(AnalysisResult.error(start, request.method(), request.url(),
+                onResult.accept(AnalysisResult.error(UUID.randomUUID().toString(), start, request.method(), request.url(),
                         response != null ? response.statusCode() : -1,
                         "分析队列已满或插件正在卸载，本次分析被跳过。", 0L));
             }
@@ -250,6 +244,9 @@ public final class TrafficAnalyzer {
         String method = request.method();
         String url = request.url();
         int statusCode = response != null ? response.statusCode() : -1;
+        // 本次分析的共享 ID：贯穿 entry / finding / audit-trail,跨毫秒撞键也不会串。
+        // 入口一次性生成,后续 phase 1 / phase 2 / 异常 fallback 必须复用同一值。
+        String analysisId = UUID.randomUUID().toString();
 
         // 1. 取启用的技能快照（按"默认枚举顺序 + 其余按字典序"拼接——与 SkillStateStore.save 一致）。
         List<Skill> enabledSkills = resolveEnabledSkills();
@@ -276,17 +273,17 @@ public final class TrafficAnalyzer {
             if (enabledSkills.isEmpty()) {
                 debug("无 skill 启用 → 直接 phase 2（系统提示词里只含「重放」工具说明）");
                 phase2 = analyzeWithTools(List.of(), task, request, response,
-                        start, method, url, statusCode);
+                        analysisId, start, method, url, statusCode);
             } else {
                 debug("有 " + enabledSkills.size() + " 个 skill 启用 → phase 1 让模型选 skill + phase 2 工具增强");
                 phase2 = analyzeWithSkillSelectionAndTools(enabledSkills, pinnedSkills, task, request, response,
-                        start, method, url, statusCode);
+                        analysisId, start, method, url, statusCode);
             }
             result = phase2.result();
             forcedWrapUp = phase2.forcedWrapUp();
         } catch (Exception e) {
             error("AI 流量分析失败：" + method + " " + url, e);
-            result = AnalysisResult.error(start, method, url, statusCode, e.getMessage(),
+            result = AnalysisResult.error(analysisId, start, method, url, statusCode, e.getMessage(),
                     System.currentTimeMillis() - start);
         }
 
@@ -322,8 +319,8 @@ public final class TrafficAnalyzer {
     /**
      * 释放资源：插件卸载时调用。
      *
-     * <p>中断执行器（排队任务放弃、进行中的 AI 请求由 {@link AnalysisTask#cancel()}
-     * 路径取消），避免 Burp 重载插件后残留旧分析线程与任务队列。</p>
+     * 中断执行器（排队任务放弃、进行中的 AI 请求由 {@link AnalysisTask#cancel()}
+     * 路径取消），避免 Burp 重载插件后残留旧分析线程与任务队列。
      */
     public void shutdown() {
         executor.shutdownNow();
@@ -333,15 +330,15 @@ public final class TrafficAnalyzer {
      * 工具增强分析入口：把 phase 2 交给 {@link com.auditai.burp.tools.ToolLoopOrchestrator}，
      * 让模型在分析过程中自主决定调用哪些工具（"重放"等）来验证假设。
      *
-     * <p>系统提示词由 {@code PromptBuilder.buildSystemPromptForReplay} 构造（含工具说明），
-     * 用户段由 {@code PromptBuilder.buildUserPrompt} 构造（再叠加 skill userContext）。</p>
+     * 系统提示词由 {@code PromptBuilder.buildSystemPromptForReplay} 构造（含工具说明），
+     * 用户段由 {@code PromptBuilder.buildUserPrompt} 构造（再叠加 skill userContext）。
      *
-     * <p>工具是 phase 2 的<b>常驻能力</b>，不再与 skill 列表耦合——即使用户一个 skill
-     * 都没启用，模型仍然能调任何已注册的工具来验证假设。</p>
+     * 工具是 phase 2 的常驻能力，不再与 skill 列表耦合——即使用户一个 skill
+     * 都没启用，模型仍然能调任何已注册的工具来验证假设。
      */
     private Phase2Outcome analyzeWithTools(List<Skill> enabledSkills, AnalysisTask task,
                                             HttpRequest request, HttpResponse response,
-                                            long start, String method, String url, int statusCode)
+                                            String analysisId, long start, String method, String url, int statusCode)
             throws AiException {
         // 关键入口日志——确保用户能在 Output 看到 phase 2 工具增强确实启动了
         debug("analyzeWithTools 进入：选中 skill 数=" + enabledSkills.size()
@@ -391,11 +388,11 @@ public final class TrafficAnalyzer {
         // 走统一的 extractFindings 路径：用 orchestrator 暴露的最后一轮 AI 原始响应，
         // 让 risk / findings 与单轮 / 两阶段路径行为完全一致。
         AnalysisResponseParser.ExtractedFindings extracted =
-                AnalysisResponseParser.extractFindings(outcome.lastRaw(), method, url, start, start);
+                AnalysisResponseParser.extractFindings(analysisId, outcome.lastRaw(), method, url, start, start);
         List<Finding> findings = AnalysisResponseParser.resolveFindings(
-                extracted, outcome.analysis(), method, url, start, start);
+                analysisId, extracted, outcome.analysis(), method, url, start, start);
         return new Phase2Outcome(
-                AnalysisResult.success(start, method, url, statusCode, outcome.analysis(),
+                AnalysisResult.success(analysisId, start, method, url, statusCode, outcome.analysis(),
                         System.currentTimeMillis() - start, findings),
                 outcome.forcedWrapUp());
     }
@@ -405,15 +402,15 @@ public final class TrafficAnalyzer {
      * 再把 phase 2 交给 {@link com.auditai.burp.tools.ToolLoopOrchestrator}，
      * 用选中的 skill 列表 + 常驻工具做多轮分析。
      *
-     * <p>与 {@link #analyzeWithTools} 的唯一差别是 phase 1 这一步——把"该不该用 skill"
+     * 与 {@link #analyzeWithTools} 的唯一差别是 phase 1 这一步——把"该不该用 skill"
      * 这个低价值决策从模型手里拿走（强制选 skill），再让模型在 phase 2 用 skill + 工具
-     * 做最终分析。</p>
+     * 做最终分析。
      */
     private Phase2Outcome analyzeWithSkillSelectionAndTools(List<Skill> enabledSkills,
                                                              List<Skill> pinnedSkills,
                                                              AnalysisTask task,
                                                              HttpRequest request, HttpResponse response,
-                                                             long start, String method, String url, int statusCode)
+                                                             String analysisId, long start, String method, String url, int statusCode)
             throws AiException {
         // pinned id 集合：用于短路 A 判断 / PromptBuilder 拼【必选技能】目录 / phase 2 去重
         Set<String> pinnedIdSet = new HashSet<>();
@@ -442,7 +439,7 @@ public final class TrafficAnalyzer {
             debug("phase 1 候选为空（所有启用都是自动激活）→ 跳过 phase 1，"
                     + "直接进入 phase 2 注入 " + pinnedSkills.size() + " 个自动激活技能 + 重放能力");
             return analyzeWithTools(pinnedSkills, task, request, response,
-                    start, method, url, statusCode);
+                    analysisId, start, method, url, statusCode);
         }
 
         // 阶段 2 选中 = 模型在 phase 1 选的 + 自动激活的。
@@ -492,7 +489,7 @@ public final class TrafficAnalyzer {
             String reason = parseAttempt.failureReason();
             error("阶段 1 模型响应解析失败，跳过 phase 2 直接收尾：" + reason, null);
             return new Phase2Outcome(
-                    AnalysisResult.success(start, method, url, statusCode,
+                    AnalysisResult.success(analysisId, start, method, url, statusCode,
                             "（阶段 1 解析失败：" + reason + "）",
                             System.currentTimeMillis() - start, List.of()),
                     false);
@@ -524,15 +521,15 @@ public final class TrafficAnalyzer {
                 debug("phase 1：模型选 0 个 skill 但有 " + pinnedSkills.size()
                         + " 个必选技能 → 不直接收尾，强制进入 phase 2 用 pinned + 重放能力");
                 return analyzeWithTools(pinnedSkills, task, request, response,
-                        start, method, url, statusCode);
+                        analysisId, start, method, url, statusCode);
             }
             debug("phase 1：模型选择 0 个 skill 且给了 analysis → 跳过 phase 2，直接收尾（注意：phase 1 不暴露重放工具，所以这里没有重放机会）");
             AnalysisResponseParser.ExtractedFindings extracted =
-                    AnalysisResponseParser.extractFindings(phase1Raw, method, url, start, start);
+                    AnalysisResponseParser.extractFindings(analysisId, phase1Raw, method, url, start, start);
             List<Finding> findings = AnalysisResponseParser.resolveFindings(
-                    extracted, selection.analysis(), method, url, start, start);
+                    analysisId, extracted, selection.analysis(), method, url, start, start);
             return new Phase2Outcome(
-                    AnalysisResult.success(start, method, url, statusCode,
+                    AnalysisResult.success(analysisId, start, method, url, statusCode,
                             selection.analysis().isEmpty() ? "（模型未给出分析结论）" : selection.analysis(),
                             System.currentTimeMillis() - start, findings),
                     false);
@@ -559,15 +556,15 @@ public final class TrafficAnalyzer {
                 + "）+ 自动激活 " + pinnedSkills.size() + " 个"
                 + " → 进入 phase 2 工具增强分析（合计 " + phase2Selection.size() + " 个）");
         return analyzeWithTools(phase2Selection, task, request, response,
-                start, method, url, statusCode);
+                analysisId, start, method, url, statusCode);
     }
 
     /**
      * 阶段 1 解析入口：返回 {@link AnalysisResponseParser.ParseAttempt}，让调用方拿到
      * 失败原因决定走 fail-fast 还是 continue。
      *
-     * <p>具体决策表（按用户拍板的协议）见 {@link AnalysisResponseParser#resolveSelection}；
-     * 本方法只在解析失败时打一条 debug 日志，方便定位阶段 1 异常。</p>
+     * 具体决策表（按用户拍板的协议）见 {@link AnalysisResponseParser#resolveSelection}；
+     * 本方法只在解析失败时打一条 debug 日志，方便定位阶段 1 异常。
      */
     private AnalysisResponseParser.ParseAttempt parseSelection(String rawText, List<Skill> enabledSkills) {
         AnalysisResponseParser.ParseAttempt attempt =
@@ -607,8 +604,8 @@ public final class TrafficAnalyzer {
     /**
      * 取"自动激活"的技能：永远不进 phase 1 候选目录，但每次 phase 2 都会自动注入。
      *
-     * <p>顺序：先按 {@link com.auditai.burp.skills.DefaultEnabledSkill#ids()} 拼接
-     * （与 enabledSkills 顺序保持一致），再按字典序补上其余 id。</p>
+     * 顺序：先按 {@link com.auditai.burp.skills.DefaultEnabledSkill#ids()} 拼接
+     * （与 enabledSkills 顺序保持一致），再按字典序补上其余 id。
      */
     private List<Skill> resolvePinnedSkills() {
         Set<String> pinnedIds = skillStateStore.loadPinnedIds();
@@ -646,9 +643,9 @@ public final class TrafficAnalyzer {
      * 渲染启用技能列表的 userContext 模板，按每个技能的 {@code userContext} 拼到基础
      * user 段之后。技能声明的"附加上下文"（如多报文协同的历史摘要）通过此机制注入 user 段。
      *
-     * <p>在新的"工具"编排里，本方法的结果会被 {@code analyzeWithTools} 进一步
+     * 在新的"工具"编排里，本方法的结果会被 {@code analyzeWithTools} 进一步
      * 通过 {@code ToolLoopOrchestrator.初始 user supplier} 注入——保证多报文协同
-     * 等"行为注入型"技能仍然能影响 user 段。</p>
+     * 等"行为注入型"技能仍然能影响 user 段。
      */
     private String buildUserPromptWithSkills(String baseUserPrompt, List<Skill> skills, HttpRequest request) {
         if (skills == null || skills.isEmpty()) {
@@ -667,12 +664,10 @@ public final class TrafficAnalyzer {
     /**
      * 把单个技能 {@code userContext} 模板按占位符替换为实际内容。
      *
-     * <p>支持的占位符：</p>
-     * <ul>
-     *   <li>{@code {related}}：同域历史摘要（按技能声明的 {@code summaryCount} 截取），
-     *       历史库不可用 / host 解析失败 / 无历史时回退到说明性占位文本；</li>
-     *   <li>{@code {summaryCount}}：本次实际取得的摘要条数（数字）。</li>
-     * </ul>
+     * 支持的占位符：
+     *   {@code {related}}：同域历史摘要（按技能声明的 {@code summaryCount} 截取），
+     *       历史库不可用 / host 解析失败 / 无历史时回退到说明性占位文本；
+     *   {@code {summaryCount}}：本次实际取得的摘要条数（数字）。
      */
     private String renderUserContext(Skill skill, HttpRequest request) {
         String template = skill.userContext();
@@ -721,7 +716,7 @@ public final class TrafficAnalyzer {
     }
 
     /**
-     * 在历史库中定位与当前请求 (method + url) 匹配的<b>最近一条</b>记录 id；
+     * 在历史库中定位与当前请求 (method + url) 匹配的最近一条记录 id；
      * 找不到返回 -1（不排除任何记录）。仅用于"同域历史摘要"排除自身。
      */
     private long findSelfEntryId(HttpRequest request) {
@@ -791,9 +786,9 @@ public final class TrafficAnalyzer {
     /**
      * 在执行器线程里同步等待一个 {@link CancellableAiCall}。
      *
-     * <p>先注册任务正在执行的调用（{@code attachCall}）再检查取消标志——
+     * 先注册任务正在执行的调用（{@code attachCall}）再检查取消标志——
      * 若先检查后注册，取消会落在"activeCall 仍为空"的窗口里：cancel() 只置标志，
-     * 已经发出的 AI 请求无人取消，会完整跑完（用户以为取消了，模型调用仍在计费）。</p>
+     * 已经发出的 AI 请求无人取消，会完整跑完（用户以为取消了，模型调用仍在计费）。
      */
     private String executeAndAwait(AnalysisTask task, java.util.function.Supplier<CancellableAiCall> starter)
             throws AiException {
@@ -834,10 +829,10 @@ public final class TrafficAnalyzer {
     /**
      * Phase 2（工具增强分析）的返回值：分析结果 + 是否因 {@code MAX_LOOPS} 强制收尾。
      *
-     * <p>把 {@code forcedWrapUp} 从编排器透到外层 {@link #analyze}，让"⚠ 工具循环超时强制收尾"
+     * 把 {@code forcedWrapUp} 从编排器透到外层 {@link #analyze}，让"⚠ 工具循环超时强制收尾"
      * 这条 debug 日志只在真正被强制收尾时打出来——和【分析完成：】形成互斥关系，
      * 避免用户看到两条都说"已完成"的歧义日志。该行走 debug 通道,
-     * 由 {@code -Dauditai.debug.prompt} 开关统一控制是否输出。</p>
+     * 由 {@code -Dauditai.debug.prompt} 开关统一控制是否输出。
      */
     private record Phase2Outcome(AnalysisResult result, boolean forcedWrapUp) {
     }

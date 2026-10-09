@@ -5,7 +5,6 @@ import burp.api.montoya.http.message.HttpRequestResponse;
 import com.auditai.burp.ai.PromptBuilder;
 import com.auditai.burp.config.Settings;
 import com.auditai.burp.config.SettingsStore;
-import com.auditai.burp.history.AnalysisHistoryEntry;
 import com.auditai.burp.history.AnalysisHistoryStore;
 import com.auditai.burp.http.FindingStore;
 import com.auditai.burp.http.TrafficAnalyzer;
@@ -24,18 +23,16 @@ import java.util.function.Consumer;
  * 插件主界面：多页签容器。
  *
  * 当前包含五个页签，将来可继续扩展（JTabbedPane.addTab 追加即可）：
- * <ul>
- *   <li><b>分析</b>：AnalysisPanel——报文页签容器（类似 Repeater，每次发送/新建
- *       生成编号页签 1、2、3…，每个页签独立分析，可切换查看）；</li>
- *   <li><b>设置</b>：SettingsPanel——AI 服务、提示词、被动分析、<b>语言切换</b>；</li>
- *   <li><b>历史</b>：AnalysisHistoryPanel——经 AI 分析模块处理过的报文记录
- *       （手动 / 被动分析）；</li>
- *   <li><b>问题</b>：FindingsPanel——经模型分析后认为存在 / 可疑的 URL 列表，
- *       下方展示报告 + Request/Response（在"历史"之后）；</li>
- *   <li><b>技能</b>：SkillsPanel——技能网格，每个技能取自
- *       <code>src/main/resources/skills/</code> 目录下的 {@code <id>/SKILL.md}
- *       （含 <code>vuln/</code>、<code>auxiliary/</code> 两个分类子目录）。</li>
- * </ul>
+ *   分析：AnalysisPanel——报文页签容器（类似 Repeater，每次发送/新建
+ *       生成编号页签 1、2、3…，每个页签独立分析，可切换查看）；
+ *   设置：SettingsPanel——AI 服务、提示词、被动分析、语言切换；
+ *   历史：AnalysisHistoryPanel——经 AI 分析模块处理过的报文记录
+ *       （手动 / 被动分析）；
+ *   问题：FindingsPanel——经模型分析后认为存在 / 可疑的 URL 列表，
+ *       下方展示报告 + Request/Response（在"历史"之后）；
+ *   技能：SkillsPanel——技能网格，每个技能取自
+ *       src/main/resources/skills/ 目录下的 {@code <id>/SKILL.md}
+ *       （含 vuln/、auxiliary/ 两个分类子目录）。
  *
  * 本类还对外提供 acceptMessage(HttpRequestResponse)：供上下文菜单
  * （"Send to AuditAI"）把其他模块（Proxy 历史、Repeater 等）的报文送入分析页。
@@ -117,8 +114,6 @@ public final class MainTab extends JTabbedPane implements LocaleAware {
         // 问题页：依赖 historyStore 反查 Request/Response（AnalysisContext 缺失时兜底）；
         // historyStore 为 null 时 Request/Response 页签空。
         this.findingsPanel = new FindingsPanel(api, findingStore, historyStore, this::onFindingsCountChanged);
-        // 历史->问题联动:选中 entry 时把 analysisId 传给 findingsPanel,顺手切到问题页签;entry 为 null 时解开。
-        this.historyPanel.setOnEntrySelectionChanged(this::onHistoryEntrySelectionChanged);
         // 技能页从 classpath:/skills/ 目录扫描 <id>/SKILL.md（含 vuln/、auxiliary/ 子目录），
         // 再叠加 <sessionRoot>/custom-skills/ 作为扁平形态的用户技能根。
         Path userSkillDir = customSkillStore == null ? null : customSkillStore.rootDirectory();
@@ -200,21 +195,11 @@ public final class MainTab extends JTabbedPane implements LocaleAware {
         setTitleAt(findingsTabIndex, findingsTabNormalTitle(count));
     }
 
-    /** 历史->问题联动:选中 entry 时设 filter + 切到问题页签;entry 为 null 时清除过滤。 */
-    private void onHistoryEntrySelectionChanged(AnalysisHistoryEntry entry) {
-        if (entry == null) {
-            findingsPanel.clearAnalysisIdFilter();
-            return;
-        }
-        findingsPanel.setAnalysisIdFilter(entry.getAnalysisId());
-        setSelectedComponent(findingsPanel);
-    }
-
     /**
      * 页签索引是否已经指向真实存在的页签。
      *
      * 为什么单独抽成方法：本容器在构造期就会收到子面板的回调，而索引字段那时尚未赋值
-     * （blank final 的运行时默认值是 <b>0</b>，不是 -1），"<0 即未就绪"这种写法会漏判，
+     * （blank final 的运行时默认值是 0，不是 -1），"<0 即未就绪"这种写法会漏判，
      * 于是 {@code setTitleAt(0,...)} 在 0 个页签时抛 {@code IndexOutOfBoundsException}。
      * 抽出来后可被单测直接钉住这个不变量。
      *
@@ -299,7 +284,7 @@ public final class MainTab extends JTabbedPane implements LocaleAware {
      *
      * 典型用法:装配方先 new MainTab(hook 尚未就绪)-> addTab->拿到 historyStore
      * 引用后回填 hook。已有页签的 hook 已在构造期确定,无法回填——所以通常在
-     * 装配方应该用 <b>先 new MainTab->立即 setOnAnalysisCompleted</b> 的顺序,
+     * 装配方应该用 先 new MainTab->立即 setOnAnalysisCompleted 的顺序,
      * 保证用户首次右键发送的报文能进"历史"。
      *
      * @param hook 回调;为 null 表示清空(仅影响后续动态新增的 MessageTab)。
