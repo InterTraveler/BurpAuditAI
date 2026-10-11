@@ -870,8 +870,6 @@ public final class FindingsPanel extends JPanel implements LocaleAware {
      *
      * 实现：
      *   "严重程度"列（第 0 列）按等级染色 + 加粗;
-     *   "描述"列（第 3 列）如果是占位 finding（描述末尾带"（占位）"），用斜体 + 浅灰
-     *       标识，让用户一眼区分"模型给的" vs "UI 兜底生成的"。
      *   "标记误报"覆盖"严重程度"列:被标记的 finding 显示灰色文字,不再按 severity 染色。
      *   其它列保持默认外观。
      */
@@ -916,11 +914,6 @@ public final class FindingsPanel extends JPanel implements LocaleAware {
                 } else {
                     setFont(plain);
                 }
-            } else if (column == 3 && value != null
-                    && value.toString().endsWith(I18n.get().t("ui.findings.report.placeholderSuffix"))) {
-                // 占位 finding：斜体 + 浅灰
-                setFont(getFont().deriveFont(Font.ITALIC));
-                c.setForeground(new Color(140, 140, 140));
             } else {
                 setFont(plain);
             }
@@ -942,7 +935,7 @@ public final class FindingsPanel extends JPanel implements LocaleAware {
         };
     }
 
-    /** "标记误报"列显示的灰色 —— 与占位 finding 描述用的浅灰保持一致,语义上都是"被压低权重"。 */
+    /** "标记误报"列显示的灰色:被压低权重的 finding 用浅灰标识,与其它严重程度色区分。 */
     private static final Color FALSE_POSITIVE_COLOR = new Color(120, 120, 120);
 
     /**
