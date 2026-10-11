@@ -66,6 +66,15 @@ public final class FindingStore implements AutoCloseable {
      * 同 id 二次入库时 {@code remove + put} 把它移到末尾。
      */
     private final LinkedHashMap<String, AnalysisContext> contexts = new LinkedHashMap<>();
+    /**
+     * 被标记为"误报"的 findingId 集合。
+     *
+     * 不放在 Finding 字段里:保持 Finding 的不可变语义;标记属于"用户对当前 store
+     * 的视图选择",与 finding 本身的分析结果无关。
+     * finding 从主索引离开的所有路径(remove / clear / FIFO 淘汰)都同步清理本 set,
+     * 避免 set 与 findings map 状态不一致。
+     */
+    private final LinkedHashSet<String> markedFalsePositiveIds = new LinkedHashSet<>();
     private final List<Consumer<Void>> listeners = new CopyOnWriteArrayList<>();
     private final Object lock = new Object();
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
@@ -296,6 +305,8 @@ public final class FindingStore implements AutoCloseable {
                 return false;
             }
             findingIdsInOrder.remove(findingId);
+            // 同步清理误报标记：finding 删了,标记不能再引用 dangling id
+            markedFalsePositiveIds.remove(findingId);
             String aid = existing.getAnalysisId();
             // 同步清理 analysisId → finding 索引桶
             List<Finding> bucket = findingsByAnalysisId.get(aid);
@@ -324,16 +335,66 @@ public final class FindingStore implements AutoCloseable {
     }
 
     /**
+     * 给指定 finding 打/取消"误报"标记。{@code marked=true} 表示该 finding 已被人工判定为误报,
+     * {@code marked=false} 表示取消标记。
+     *
+     * 状态真正发生变化时同步写盘 + 通知监听器;状态未变(findingId 未命中 store 或
+     * 已经是目标状态)时静默返回 false,不写盘、不通知,避免无意义的 IO / 刷新风暴。
+     *
+     * @return 是否实际改变了状态(用于区分"本次设置有效"vs"本来就是这个状态")。
+     */
+    public boolean setFalsePositive(String findingId, boolean marked) {
+        if (findingId == null || findingId.isBlank()) {
+            return false;
+        }
+        boolean changed;
+        synchronized (lock) {
+            if (!findings.containsKey(findingId)) {
+                return false;
+            }
+            if (marked) {
+                changed = markedFalsePositiveIds.add(findingId);
+            } else {
+                changed = markedFalsePositiveIds.remove(findingId);
+            }
+            if (changed) {
+                persistIndex();
+            }
+        }
+        if (changed) {
+            notifyListeners();
+        }
+        return changed;
+    }
+
+    /**
+     * 查询某条 finding 当前是否处于"标记误报"状态。
+     *
+     * findingId 为 null / 空白 / 不存在时一律返回 false(不抛异常)。
+     * 与 #setFalsePositive 配对使用,UI 渲染器按行调用决定列显示。
+     */
+    public boolean isMarkedFalsePositive(String findingId) {
+        if (findingId == null || findingId.isBlank()) {
+            return false;
+        }
+        synchronized (lock) {
+            return markedFalsePositiveIds.contains(findingId);
+        }
+    }
+
+    /**
      * 清空所有问题。
      */
     public void clear() {
         boolean changed;
         synchronized (lock) {
-            changed = !findings.isEmpty() || !contexts.isEmpty() || !findingsByAnalysisId.isEmpty();
+            changed = !findings.isEmpty() || !contexts.isEmpty() || !findingsByAnalysisId.isEmpty()
+                    || !markedFalsePositiveIds.isEmpty();
             findings.clear();
             contexts.clear();
             findingsByAnalysisId.clear();
             findingIdsInOrder.clear();
+            markedFalsePositiveIds.clear();
             if (changed) {
                 persistIndex();
             }
@@ -424,6 +485,10 @@ public final class FindingStore implements AutoCloseable {
             }
             Finding removed = findings.remove(oldest);
             findingIdsInOrder.remove(oldest);
+            // 同步清理误报标记:FIFO 淘汰时也必须移除 dangling id,与 #remove 行为一致。
+            // 不清的话 isMarkedFalsePositive(oldest) 还会返回 true,但 store 已找不到该 finding,
+            // 形成"set 里有标记、findings map 里没记录"的不一致状态。
+            markedFalsePositiveIds.remove(oldest);
             if (removed != null) {
                 String aid = removed.getAnalysisId();
                 // 同步清理 analysisId 索引桶
@@ -505,6 +570,19 @@ public final class FindingStore implements AutoCloseable {
                     }
                 }
             }
+            // 3. 恢复"标记误报"集合:仅保留当前仍存在于 findings map 中的 id,
+            //    老版本磁盘文件(无 markedFindingPositiveIds 字段)或指向已删除 finding 的
+            //    dangling id 都会被静默丢弃,不会影响加载。
+            if (root.has("markedFalsePositiveIds") && root.get("markedFalsePositiveIds").isJsonArray()) {
+                JsonArray ids = root.getAsJsonArray("markedFalsePositiveIds");
+                for (int i = 0; i < ids.size(); i++) {
+                    JsonElement el = ids.get(i);
+                    String id = el == null || !el.isJsonPrimitive() ? null : el.getAsString();
+                    if (id != null && findings.containsKey(id)) {
+                        markedFalsePositiveIds.add(id);
+                    }
+                }
+            }
         }
     }
 
@@ -552,6 +630,7 @@ public final class FindingStore implements AutoCloseable {
         JsonObject root = new JsonObject();
         JsonArray arr = new JsonArray();
         JsonArray ctxs = new JsonArray();
+        JsonArray marked = new JsonArray();
         synchronized (lock) {
             for (Finding f : findings.values()) {
                 arr.add(serializeFinding(f));
@@ -559,9 +638,13 @@ public final class FindingStore implements AutoCloseable {
             for (AnalysisContext ctx : contexts.values()) {
                 ctxs.add(serializeContext(ctx));
             }
+            for (String id : markedFalsePositiveIds) {
+                marked.add(id);
+            }
         }
         root.add("findings", arr);
         root.add("contexts", ctxs);
+        root.add("markedFalsePositiveIds", marked);
         try {
             Path tmp = Files.createTempFile(findingsDirectory, "findings-index", ".tmp");
             try {

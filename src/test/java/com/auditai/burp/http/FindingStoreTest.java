@@ -370,4 +370,122 @@ class FindingStoreTest {
             assertNotNull(ctx.getResponseBytes());
         }
     }
+
+    @Test
+    void setFalsePositiveTogglesAndQueries(@TempDir Path tempDir) throws Exception {
+        try (FindingStore store = new FindingStore(tempDir, 100)) {
+            Finding f1 = Finding.create("aid", "XSS", 80, "high", "d1", "GET", "http://a", 1L, 1L);
+            Finding f2 = Finding.create("aid", "SQLi", 90, "critical", "d2", "GET", "http://b", 2L, 1L);
+            store.addFindings(AnalysisResult.success("aid", 1L, "GET", "http://a", 200, "s", 0L, List.of(f1, f2)));
+
+            assertFalse(store.isMarkedFalsePositive(f1.getFindingId()));
+            assertFalse(store.isMarkedFalsePositive(null));
+            assertFalse(store.isMarkedFalsePositive(""));
+            assertFalse(store.isMarkedFalsePositive("not-exists"));
+
+            AtomicInteger notifications = new AtomicInteger();
+            store.addListener(ignored -> notifications.incrementAndGet());
+
+            assertTrue(store.setFalsePositive(f1.getFindingId(), true));
+            assertEquals(1, notifications.get());
+            assertTrue(store.isMarkedFalsePositive(f1.getFindingId()));
+            assertFalse(store.isMarkedFalsePositive(f2.getFindingId()));
+
+            // 状态未变时 setFalsePositive 必须返回 false 且不触发 listener,
+            // 否则监听器会无谓地把当前选中行也洗一遍,菜单弹出瞬间会闪。
+            assertFalse(store.setFalsePositive(f1.getFindingId(), true));
+            assertEquals(1, notifications.get());
+
+            assertTrue(store.setFalsePositive(f1.getFindingId(), false));
+            assertEquals(2, notifications.get());
+            assertFalse(store.isMarkedFalsePositive(f1.getFindingId()));
+
+            // 不存在的 findingId：静默忽略、不触发通知
+            assertFalse(store.setFalsePositive("missing", true));
+            assertEquals(2, notifications.get());
+            assertFalse(store.setFalsePositive(null, true));
+            assertFalse(store.setFalsePositive("", true));
+        }
+    }
+
+    @Test
+    void removeClearsFalsePositiveMarkAndSyncsNotify(@TempDir Path tempDir) throws Exception {
+        // 删除一条 finding 后,它的"标记误报"id 必须同步从 set 清理,否则会留下 dangling id;
+        // 同时再次调用 setFalsePositive 应静默失败,因为 store 已找不到它。
+        try (FindingStore store = new FindingStore(tempDir, 100)) {
+            Finding f1 = Finding.create("aid", "XSS", 80, "high", "d1", "GET", "http://a", 1L, 1L);
+            Finding f2 = Finding.create("aid", "SQLi", 90, "critical", "d2", "GET", "http://b", 2L, 1L);
+            store.addFindings(AnalysisResult.success("aid", 1L, "GET", "http://a", 200, "s", 0L, List.of(f1, f2)));
+            store.setFalsePositive(f1.getFindingId(), true);
+            assertTrue(store.isMarkedFalsePositive(f1.getFindingId()));
+
+            store.remove(f1.getFindingId());
+            assertFalse(store.isMarkedFalsePositive(f1.getFindingId()));
+            assertFalse(store.setFalsePositive(f1.getFindingId(), true));
+
+            assertFalse(store.isMarkedFalsePositive(f2.getFindingId()));
+        }
+    }
+
+    @Test
+    void clearResetsFalsePositiveMarks(@TempDir Path tempDir) throws Exception {
+        try (FindingStore store = new FindingStore(tempDir, 100)) {
+            Finding f1 = Finding.create("aid", "XSS", 80, "high", "d1", "GET", "http://a", 1L, 1L);
+            store.addFindings(AnalysisResult.success("aid", 1L, "GET", "http://a", 200, "s", 0L, List.of(f1)));
+            store.setFalsePositive(f1.getFindingId(), true);
+            assertTrue(store.isMarkedFalsePositive(f1.getFindingId()));
+            store.clear();
+            assertFalse(store.isMarkedFalsePositive(f1.getFindingId()));
+        }
+    }
+
+    @Test
+    void falsePositiveMarksPersistAndReload(@TempDir Path tempDir) throws Exception {
+        // 标记误报状态必须随 findings-index.json 持久化、再次打开自动恢复;
+        // 未标记的 finding 即使持久化文件中存在,也不应被错误当成已标记。
+        try (FindingStore store = new FindingStore(tempDir, 100)) {
+            Finding marked = Finding.create("aid-marked", "SQLi", 90, "critical", "d1",
+                    "GET", "http://a", 1L, 1L);
+            Finding unmarked = Finding.create("aid-other", "XSS", 50, "low", "d2",
+                    "GET", "http://b", 2L, 2L);
+            store.addFindings(AnalysisResult.success("aid-marked", 1L, "GET", "http://a", 200, "s1", 0L, List.of(marked)));
+            store.addFindings(AnalysisResult.success("aid-other", 2L, "GET", "http://b", 200, "s2", 0L, List.of(unmarked)));
+            store.setFalsePositive(marked.getFindingId(), true);
+        }
+        try (FindingStore reopened = new FindingStore(tempDir, 100)) {
+            List<Finding> all = reopened.list();
+            assertEquals(2, all.size());
+            Finding reloadedMarked = all.stream()
+                    .filter(f -> "SQLi".equals(f.getType())).findFirst().orElseThrow();
+            Finding reloadedUnmarked = all.stream()
+                    .filter(f -> "XSS".equals(f.getType())).findFirst().orElseThrow();
+            assertTrue(reopened.isMarkedFalsePositive(reloadedMarked.getFindingId()));
+            assertFalse(reopened.isMarkedFalsePositive(reloadedUnmarked.getFindingId()));
+        }
+    }
+
+    @Test
+    void evictDropsDanglingFalsePositiveMark(@TempDir Path tempDir) throws Exception {
+        // FIFO 超出 maxFindings 时最旧 finding 被 evict,它的误报标记必须同步清理,
+        // 否则 isMarkedFalsePositive(oldestId) 还会返回 true,但 store 已经没有该 finding,
+        // 形成 set 与 findings map 状态不一致。
+        try (FindingStore store = new FindingStore(tempDir, 2)) {
+            Finding f0 = Finding.create("aid", "A", 50, "low", "d0", "GET", "http://0", 1L, 1L);
+            Finding f1 = Finding.create("aid", "B", 50, "low", "d1", "GET", "http://1", 2L, 2L);
+            store.addFindings(AnalysisResult.success("aid", 1L, "GET", "http://0", 200, "s", 0L, List.of(f0, f1)));
+            assertTrue(store.setFalsePositive(f0.getFindingId(), true));
+            assertTrue(store.isMarkedFalsePositive(f0.getFindingId()));
+
+            // 加入第 3 条,f0 应被 FIFO 淘汰
+            Finding f2 = Finding.create("aid", "C", 50, "low", "d2", "GET", "http://2", 3L, 3L);
+            store.addFindings(AnalysisResult.success("aid", 3L, "GET", "http://2", 200, "s", 0L, List.of(f2)));
+            assertEquals(2, store.list().size());
+            assertFalse(store.list().stream().anyMatch(f -> f0.getFindingId().equals(f.getFindingId())));
+            // 被淘汰的 f0,其误报标记也已被清理;
+            // 否则 isMarkedFalsePositive(f0) 仍返回 true,但 store 已找不到 f0,状态不一致
+            assertFalse(store.isMarkedFalsePositive(f0.getFindingId()));
+            // f1 仍在、未被标记 —— 仅作旁证,确保 set 里只有 evict 同步清理的那一份
+            assertFalse(store.isMarkedFalsePositive(f1.getFindingId()));
+        }
+    }
 }

@@ -644,14 +644,10 @@ public final class FindingsPanel extends JPanel implements LocaleAware {
             return;
         }
         int modelRow = table.convertRowIndexToModel(viewRow);
-        if (modelRow < 0 || modelRow >= tableModel.getRowCount()) {
+        String findingId = findingIdAt(modelRow);
+        if (findingId == null) {
             return;
         }
-        Object idCell = tableModel.getValueAt(modelRow, COLUMN_FINDING_ID);
-        if (!(idCell instanceof String)) {
-            return;
-        }
-        String findingId = (String) idCell;
         // 用描述 + URL 拼一个更可读的确认提示
         String description = String.valueOf(tableModel.getValueAt(modelRow, 3));
         String url = String.valueOf(tableModel.getValueAt(modelRow, 4));
@@ -671,18 +667,24 @@ public final class FindingsPanel extends JPanel implements LocaleAware {
     }
 
     /**
-     * 创建表格右键菜单：提供 "Delete" 与 "Clear history" 两项。弹出前自动选中鼠标所在行
-     * （避免"点行 A 但选中行 B"的错位，与 {@link AnalysisHistoryPanel} 的做法一致）。
+     * 创建表格右键菜单：提供 "标记误报 / 取消标记"、"Delete" 与 "Clear history" 三项。
+     * 弹出前自动选中鼠标所在行（避免"点行 A 但选中行 B"的错位，与
+     * {@link AnalysisHistoryPanel} 的做法一致）。
      *
      * "Clear history" 在 store 不可用或当前无任何 finding 时禁用，保留确认弹窗语义
      * （与原工具栏 Clear 按钮一致）。"Delete" 在未命中数据行时禁用，避免菜单在空白处
-     * 可点却无事可删。
+     * 可点却无事可删。"标记误报 / 取消标记"在同一位置根据当前行是否已标记动态切换文案，
+     * 让用户一眼看出"再点一下可以撤销"。
      *
      * 菜单在构造期只创建一次，每次弹出前按当前语言刷新文案（与历史面板一致），
      * 避免语言切换后菜单停留在旧语言。
      */
     private JPopupMenu createContextMenu() {
         JPopupMenu menu = new JPopupMenu();
+        JMenuItem toggleFalsePositiveItem = new JMenuItem(
+                I18n.get().t("ui.findings.menu.markFalsePositive"));
+        toggleFalsePositiveItem.addActionListener(event -> toggleFalsePositiveForSelectedFinding());
+        menu.add(toggleFalsePositiveItem);
         JMenuItem deleteItem = new JMenuItem(I18n.get().t("ui.findings.menu.delete"));
         deleteItem.addActionListener(event -> removeSelectedFinding());
         menu.add(deleteItem);
@@ -692,16 +694,25 @@ public final class FindingsPanel extends JPanel implements LocaleAware {
         menu.addPopupMenuListener(new PopupMenuListener() {
             @Override
             public void popupMenuWillBecomeVisible(PopupMenuEvent event) {
-                deleteItem.setText(I18n.get().t("ui.findings.menu.delete"));
-                clearItem.setText(I18n.get().t("ui.menu.clearHistory"));
                 Point point = table.getMousePosition();
                 int row = point == null ? -1 : table.rowAtPoint(point);
-                deleteItem.setEnabled(row >= 0 && store != null);
-                // Clear history: 至少要有一行可清空; store 不可用时禁用,避免点击后空操作
-                clearItem.setEnabled(store != null && tableModel.getRowCount() > 0);
                 if (row >= 0) {
                     table.setRowSelectionInterval(row, row);
                 }
+                int modelRow = row < 0 ? -1 : table.convertRowIndexToModel(row);
+                String findingId = findingIdAt(modelRow);
+                boolean onDataRow = findingId != null;
+                boolean marked = onDataRow && store != null && store.isMarkedFalsePositive(findingId);
+                toggleFalsePositiveItem.setText(I18n.get().t(marked
+                        ? "ui.findings.menu.unmarkFalsePositive"
+                        : "ui.findings.menu.markFalsePositive"));
+                // 空白处右键出来的菜单不应有任何菜单项可执行
+                toggleFalsePositiveItem.setEnabled(onDataRow && store != null);
+                deleteItem.setText(I18n.get().t("ui.findings.menu.delete"));
+                deleteItem.setEnabled(onDataRow && store != null);
+                clearItem.setText(I18n.get().t("ui.menu.clearHistory"));
+                // Clear history: 至少要有一行可清空; store 不可用时禁用,避免点击后空操作
+                clearItem.setEnabled(store != null && tableModel.getRowCount() > 0);
             }
 
             @Override
@@ -713,6 +724,47 @@ public final class FindingsPanel extends JPanel implements LocaleAware {
             }
         });
         return menu;
+    }
+
+    /**
+     * 取表格某 model 行的 findingId(从隐藏列读);row 无效或读不到时返回 null。
+     *
+     * 集中在一处方便多处复用:右键菜单切换文案、删除/标记两条路径都靠这个
+     * findingId 做精确匹配,不再依赖 description+url 软匹配。
+     */
+    private String findingIdAt(int modelRow) {
+        if (modelRow < 0 || modelRow >= tableModel.getRowCount()) {
+            return null;
+        }
+        Object idCell = tableModel.getValueAt(modelRow, COLUMN_FINDING_ID);
+        if (!(idCell instanceof String)) {
+            return null;
+        }
+        String id = (String) idCell;
+        return id.isBlank() ? null : id;
+    }
+
+    /**
+     * 切换当前选中 finding 的"误报"标记:已标记则取消,未标记则标记。
+     *
+     * 状态变更由 store.setFalsePositive 触发 listener → scheduleRefresh,Renderer
+     * 在下次 refresh 时自然按新状态重画,无需本方法手工 repaint。
+     */
+    private void toggleFalsePositiveForSelectedFinding() {
+        if (store == null) {
+            return;
+        }
+        int viewRow = table.getSelectedRow();
+        if (viewRow < 0) {
+            return;
+        }
+        int modelRow = table.convertRowIndexToModel(viewRow);
+        String findingId = findingIdAt(modelRow);
+        if (findingId == null) {
+            return;
+        }
+        boolean alreadyMarked = store.isMarkedFalsePositive(findingId);
+        store.setFalsePositive(findingId, !alreadyMarked);
     }
 
     /**
@@ -817,12 +869,13 @@ public final class FindingsPanel extends JPanel implements LocaleAware {
      * 严重程度颜色：让"红 / 橙 / 黄 / 蓝 / 灰"在表格里一眼可辨。
      *
      * 实现：
-     *   "严重程度"列（第 0 列）按等级染色 + 加粗；
+     *   "严重程度"列（第 0 列）按等级染色 + 加粗;
      *   "描述"列（第 3 列）如果是占位 finding（描述末尾带"（占位）"），用斜体 + 浅灰
      *       标识，让用户一眼区分"模型给的" vs "UI 兜底生成的"。
+     *   "标记误报"覆盖"严重程度"列:被标记的 finding 显示灰色文字,不再按 severity 染色。
      *   其它列保持默认外观。
      */
-    private static final class SeverityAwareRenderer extends DefaultTableCellRenderer {
+    private final class SeverityAwareRenderer extends DefaultTableCellRenderer {
 
         /** 序列化版本号。 */
         @Serial
@@ -841,13 +894,25 @@ public final class FindingsPanel extends JPanel implements LocaleAware {
                 c.setForeground(table.getForeground());
             }
             Font plain = getFont().deriveFont(Font.PLAIN);
-            if (column == 0 && value instanceof Severity sev) {
-                // 严重程度显示词随界面语言取(模型值存枚举,不直接存中文 label)
-                setText(I18n.get().t(sev.displayKey()));
-                Color tint = colorFor(sev);
-                if (tint != null) {
-                    c.setForeground(tint);
-                    setFont(getFont().deriveFont(Font.BOLD));
+            if (column == 0) {
+                int modelRow = row < 0 ? -1 : table.convertRowIndexToModel(row);
+                String findingId = findingIdAt(modelRow);
+                boolean marked = findingId != null && store != null && store.isMarkedFalsePositive(findingId);
+                if (marked) {
+                    // 标记误报：覆盖 severity 颜色与文字,用浅灰 + 普通字重
+                    setText(I18n.get().t("ui.findings.severity.falsePositive"));
+                    c.setForeground(FALSE_POSITIVE_COLOR);
+                    setFont(plain);
+                } else if (value instanceof Severity sev) {
+                    // 严重程度显示词随界面语言取(模型值存枚举,不直接存中文 label)
+                    setText(I18n.get().t(sev.displayKey()));
+                    Color tint = colorFor(sev);
+                    if (tint != null) {
+                        c.setForeground(tint);
+                        setFont(getFont().deriveFont(Font.BOLD));
+                    } else {
+                        setFont(plain);
+                    }
                 } else {
                     setFont(plain);
                 }
@@ -876,6 +941,9 @@ public final class FindingsPanel extends JPanel implements LocaleAware {
             case INFO -> new Color(120, 120, 120);
         };
     }
+
+    /** "标记误报"列显示的灰色 —— 与占位 finding 描述用的浅灰保持一致,语义上都是"被压低权重"。 */
+    private static final Color FALSE_POSITIVE_COLOR = new Color(120, 120, 120);
 
     /**
      * 把诊断信息写入 Burp Extender 错误日志：SwingWorker.done() 默认不挂顶层异常
